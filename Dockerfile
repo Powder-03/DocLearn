@@ -1,0 +1,30 @@
+
+# Stage 1: Builder
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN pip install --upgrade pip
+
+# Copy and install requirements
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+
+# Stage 2: Final
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy built wheels from builder stage
+COPY --from=builder /app/wheels /app/wheels
+
+# Install wheels
+RUN pip install --no-index --find-links=/app/wheels /app/wheels/*
+
+# Copy application code
+COPY ./app /app/app
+
+# Expose port and run application
+EXPOSE 8080
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]
