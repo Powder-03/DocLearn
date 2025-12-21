@@ -142,9 +142,10 @@ This service provides:
     )
     
     # Include routers
-    api_router, health_router = get_all_routers()
+    api_router, health_router, test_router = get_all_routers()
     app.include_router(api_router)
     app.include_router(health_router)
+    app.include_router(test_router)
     
     # Root endpoint
     @app.get("/", tags=["Root"])
