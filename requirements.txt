@@ -1,9 +1,28 @@
 
+# Core Framework
 fastapi
-uvicorn
+uvicorn[standard]
+python-multipart
+
+# Database
 sqlalchemy
 psycopg2-binary
+asyncpg
 pymongo
+
+# Configuration
 pydantic-settings
 python-dotenv
-asyncpg
+
+# LangChain & AI
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langchain-google-genai>=2.0.0
+langgraph>=0.2.0
+
+# HTTP Client
+httpx
+
+# Utilities
+python-dateutil
