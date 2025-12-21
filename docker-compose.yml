@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # Main Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: doclearn-app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/doclearn
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DB_NAME=doclearn
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - ENV=development
+      - DEBUG=true
+    depends_on:
+      - postgres
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - doclearn-network
+
+  # PostgreSQL - Session metadata, lesson plans, progress
+  postgres:
+    image: postgres:15-alpine
+    container_name: doclearn-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=doclearn
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - doclearn-network
+
+  # MongoDB - Chat history with buffer-based summarization
+  mongodb:
+    image: mongo:7.0
+    container_name: doclearn-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - doclearn-network
+
+  # Mongo Express - Optional admin UI for MongoDB
+  mongo-express:
+    image: mongo-express:latest
+    container_name: doclearn-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      - ME_CONFIG_MONGODB_URL=mongodb://mongodb:27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    profiles:
+      - dev  # Only start with: docker-compose --profile dev up
+    networks:
+      - doclearn-network
+
+volumes:
+  postgres_data:
+  mongodb_data:
+
+networks:
+  doclearn-network:
+    driver: bridge

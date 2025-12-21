@@ -39,11 +39,11 @@ async def readiness_check(db: Session = Depends(get_db)):
     """
     Readiness check endpoint.
     
-    Verifies database connectivity and returns detailed status.
+    Verifies database connectivity and LLM configuration.
     """
     checks = {
         "database": False,
-        "llm_config": False,
+        "gemini_api": False,
     }
     
     # Check database connectivity
@@ -53,16 +53,19 @@ async def readiness_check(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Database check failed: {str(e)}")
     
-    # Check LLM configuration
-    checks["llm_config"] = bool(
-        settings.OPENAI_API_KEY or settings.GOOGLE_API_KEY
-    )
+    # Check Gemini API configuration
+    checks["gemini_api"] = bool(settings.GOOGLE_API_KEY)
     
     all_healthy = all(checks.values())
     
     return {
         "status": "ready" if all_healthy else "not_ready",
         "checks": checks,
+        "models": {
+            "planning": settings.PLANNING_MODEL,
+            "tutoring": settings.TUTORING_MODEL,
+        },
+        "streaming_threshold": settings.STREAMING_TOKEN_THRESHOLD,
         "timestamp": datetime.utcnow().isoformat(),
     }
 

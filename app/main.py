@@ -9,11 +9,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
 
 from app.core.config import settings
 from app.api.routers import get_all_routers
 from app.db.session import init_db
+from app.services.mongodb import MongoDBService
 
 # Configure logging
 logging.basicConfig(
@@ -22,9 +22,6 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 log = logging.getLogger(__name__)
-
-# MongoDB client (optional, for future use)
-mongo_client = None
 
 
 @asynccontextmanager
@@ -43,34 +40,31 @@ async def lifespan(app: FastAPI):
     
     # Log configuration
     log.info(f"Environment: {settings.ENV}")
-    log.info(f"Planning Model: {settings.PLANNING_MODEL}")
-    log.info(f"Tutoring Model: {settings.TUTORING_MODEL}")
+    log.info(f"Planning Model: {settings.PLANNING_MODEL} (Gemini Pro)")
+    log.info(f"Tutoring Model: {settings.TUTORING_MODEL} (Gemini Flash)")
+    log.info(f"Streaming Threshold: {settings.STREAMING_TOKEN_THRESHOLD} tokens")
+    log.info(f"Memory Buffer Size: {settings.MEMORY_BUFFER_SIZE} messages")
     
     # Initialize database tables
     try:
         init_db()
-        log.info("Database initialized successfully")
+        log.info("PostgreSQL database initialized successfully")
     except Exception as e:
-        log.error(f"Database initialization failed: {e}")
+        log.error(f"PostgreSQL database initialization failed: {e}")
     
-    # Initialize MongoDB (optional)
-    global mongo_client
+    # Initialize MongoDB (required for chat storage)
     try:
-        mongo_client = MongoClient(settings.MONGODB_URL, serverSelectionTimeoutMS=5000)
-        mongo_client.admin.command('ismaster')
-        log.info("MongoDB connection successful")
+        await MongoDBService.connect()
+        log.info(f"MongoDB connected: {settings.MONGODB_DB_NAME}")
     except Exception as e:
-        log.warning(f"MongoDB connection failed (optional): {e}")
-        mongo_client = None
+        log.error(f"MongoDB connection failed: {e}")
+        log.warning("Chat storage will not work without MongoDB!")
     
-    # Check LLM configuration
-    if not settings.OPENAI_API_KEY and not settings.GOOGLE_API_KEY:
-        log.warning("No LLM API keys configured - AI features will not work!")
+    # Check LLM configuration (Gemini only)
+    if not settings.GOOGLE_API_KEY:
+        log.warning("⚠️  GOOGLE_API_KEY not configured - AI features will not work!")
     else:
-        if settings.GOOGLE_API_KEY:
-            log.info("Google API key configured ✓")
-        if settings.OPENAI_API_KEY:
-            log.info("OpenAI API key configured ✓")
+        log.info("✓ Google API key configured (Gemini)")
     
     log.info("=" * 60)
     log.info("Service is ready to accept requests")
@@ -83,9 +77,9 @@ async def lifespan(app: FastAPI):
     # =========================================================================
     log.info("Shutting down...")
     
-    if mongo_client:
-        mongo_client.close()
-        log.info("MongoDB connection closed")
+    # Close MongoDB connection
+    await MongoDBService.disconnect()
+    log.info("MongoDB connection closed")
     
     log.info("Shutdown complete")
 

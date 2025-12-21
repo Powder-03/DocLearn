@@ -3,21 +3,22 @@
 fastapi
 uvicorn[standard]
 python-multipart
+sse-starlette  # Server-Sent Events for streaming
 
 # Database
 sqlalchemy
 psycopg2-binary
 asyncpg
 pymongo
+motor  # Async MongoDB driver for buffer-based chat storage
 
 # Configuration
 pydantic-settings
 python-dotenv
 
-# LangChain & AI
+# LangChain & AI (Gemini only)
 langchain>=0.3.0
 langchain-core>=0.3.0
-langchain-openai>=0.2.0
 langchain-google-genai>=2.0.0
 langgraph>=0.2.0
 

@@ -2,15 +2,23 @@
 Chat Routes.
 
 API endpoints for chat interactions with the AI tutor.
+
+Supports both burst and streaming responses:
+- /chat: Standard endpoint (auto-detects streaming need, returns full response)
+- /chat/stream: SSE streaming endpoint for real-time token delivery
 """
 import logging
+import json
 from uuid import UUID
+from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from sse_starlette.sse import EventSourceResponse
 
-from app.api.deps import get_db, get_chat_service
-from app.services import ChatService
+from app.api.deps import get_db, get_chat_service, get_session_service
+from app.services import ChatService, SessionService
 from app.schemas import (
     ChatRequest,
     ChatResponse,
@@ -18,6 +26,12 @@ from app.schemas import (
     ChatMessage,
     StartLessonRequest,
     StartLessonResponse,
+)
+from app.core.llm_factory import (
+    get_tutor_llm,
+    classify_expected_response,
+    estimate_response_tokens,
+    should_stream,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,7 +47,11 @@ async def send_message(
     """
     Send a message to the AI tutor and receive a response.
     
-    This is the main tutoring endpoint. The AI will:
+    This endpoint automatically determines whether to use streaming internally,
+    but always returns a complete response. For real-time streaming to the client,
+    use the `/chat/stream` endpoint instead.
+    
+    The AI will:
     - Teach concepts one at a time
     - Ask questions to verify understanding
     - Adapt to user's pace and questions
@@ -74,6 +92,104 @@ async def send_message(
             status_code=500,
             detail=f"Failed to process message: {str(e)}"
         )
+
+
+@router.post("/stream")
+async def send_message_stream(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+):
+    """
+    Send a message and receive streaming response via Server-Sent Events (SSE).
+    
+    This endpoint streams the AI response token-by-token for real-time display.
+    Useful for longer explanations where immediate feedback improves UX.
+    
+    **Streaming Strategy:**
+    - Short responses (< 100 expected tokens): Sends as single burst
+    - Long responses (>= 100 expected tokens): Streams token by token
+    
+    **SSE Event Format:**
+    - `event: token` - Individual token chunks
+    - `event: done` - Final message with metadata
+    - `event: error` - Error information
+    
+    **Example SSE Stream:**
+    ```
+    event: token
+    data: {"content": "Let's"}
+    
+    event: token
+    data: {"content": " explore"}
+    
+    event: done
+    data: {"current_day": 1, "is_day_complete": false}
+    ```
+    """
+    chat_service = get_chat_service(db)
+    session_service = get_session_service(db)
+    
+    # Validate session exists
+    session = session_service.get_session(request.session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    async def event_generator() -> AsyncGenerator[dict, None]:
+        try:
+            # Determine if we should stream based on expected response
+            response_type = classify_expected_response(request.message)
+            expected_tokens = estimate_response_tokens(response_type)
+            use_streaming = should_stream(expected_tokens)
+            
+            if use_streaming:
+                # Stream the response token by token
+                async for token, metadata in chat_service.send_message_streaming(
+                    session_id=request.session_id,
+                    message=request.message,
+                ):
+                    if token:
+                        yield {
+                            "event": "token",
+                            "data": json.dumps({"content": token})
+                        }
+                
+                # Send completion event
+                yield {
+                    "event": "done",
+                    "data": json.dumps(metadata)
+                }
+            else:
+                # Burst mode - send complete response
+                result = await chat_service.send_message(
+                    session_id=request.session_id,
+                    message=request.message,
+                )
+                
+                # Send as single token event
+                yield {
+                    "event": "token",
+                    "data": json.dumps({"content": result["response"]})
+                }
+                
+                # Send completion event
+                yield {
+                    "event": "done",
+                    "data": json.dumps({
+                        "current_day": result["current_day"],
+                        "current_topic_index": result["current_topic_index"],
+                        "is_day_complete": result["is_day_complete"],
+                        "is_course_complete": result["is_course_complete"],
+                    })
+                }
+                
+        except Exception as e:
+            logger.exception(f"Streaming error: {str(e)}")
+            yield {
+                "event": "error",
+                "data": json.dumps({"error": str(e)})
+            }
+    
+    return EventSourceResponse(event_generator())
 
 
 @router.post("/start-lesson", response_model=StartLessonResponse)
@@ -122,9 +238,9 @@ async def get_chat_history(
     db: Session = Depends(get_db),
 ):
     """
-    Get chat history for a session.
+    Get chat history for a session from MongoDB.
     
-    Returns the most recent messages up to the limit.
+    Returns summaries (compressed history) and recent messages in buffer.
     """
     chat_service = get_chat_service(db)
     
@@ -137,7 +253,8 @@ async def get_chat_history(
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
         
-        history = chat_service.get_chat_history(session_id, limit)
+        # Now async since it fetches from MongoDB
+        history_data = await chat_service.get_chat_history(session_id, limit)
         
         return ChatHistoryResponse(
             session_id=session_id,
@@ -147,10 +264,12 @@ async def get_chat_history(
                     content=msg["content"],
                     timestamp=msg.get("timestamp"),
                 )
-                for msg in history
+                for msg in history_data["recent_messages"]
             ],
-            total_messages=len(history),
+            total_messages=len(history_data["recent_messages"]),
             current_day=session.current_day,
+            summaries=history_data.get("summaries", []),
+            total_summaries=history_data.get("total_summaries", 0),
         )
         
     except ValueError as e:

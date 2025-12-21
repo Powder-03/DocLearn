@@ -3,31 +3,49 @@ LLM Factory Module.
 
 Provides a factory pattern for instantiating different LLM instances
 based on use case (planning vs tutoring).
+
+All LLMs use Google Gemini API:
+- Planner: Gemini 2.5 Pro (powerful for curriculum generation)
+- Tutor: Gemini 2.5 Flash (fast for interactive tutoring)
+
+Streaming Strategy:
+- Expected tokens < 100: Burst response (non-streaming)
+- Expected tokens >= 100: Streaming response
 """
 from enum import Enum
-from typing import Optional
+from typing import Optional, AsyncGenerator, Union
+import logging
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class LLMType(str, Enum):
     """Types of LLMs for different use cases."""
-    PLANNER = "planner"  # Fast, cheap - for curriculum generation
-    TUTOR = "tutor"  # Powerful, creative - for interactive teaching
+    PLANNER = "planner"  # Gemini 2.5 Pro - for curriculum generation
+    TUTOR = "tutor"  # Gemini 2.5 Flash - for interactive teaching
+
+
+class ResponseMode(str, Enum):
+    """Response delivery mode."""
+    BURST = "burst"  # Non-streaming, immediate full response
+    STREAM = "stream"  # Streaming, token by token
+    AUTO = "auto"  # Automatically choose based on expected tokens
 
 
 class LLMFactory:
     """
-    Factory for creating LLM instances.
+    Factory for creating Gemini LLM instances.
     
-    Uses a hybrid strategy:
-    - PLANNER: Gemini Flash (fast, cheap) for structured output
-    - TUTOR: GPT-4o (powerful) for engaging conversation
+    Uses Google Gemini API exclusively:
+    - PLANNER: Gemini 2.5 Pro (powerful, detailed curriculum generation)
+    - TUTOR: Gemini 2.5 Flash (fast, interactive tutoring)
     """
-    
-    _instances: dict = {}
     
     @classmethod
     def get_llm(
@@ -35,20 +53,20 @@ class LLMFactory:
         llm_type: LLMType,
         temperature: Optional[float] = None,
         streaming: bool = False
-    ) -> BaseChatModel:
+    ) -> ChatGoogleGenerativeAI:
         """
-        Get an LLM instance for the specified use case.
+        Get a Gemini LLM instance for the specified use case.
         
         Args:
-            llm_type: The type of LLM to create
+            llm_type: The type of LLM to create (PLANNER or TUTOR)
             temperature: Override default temperature
             streaming: Enable streaming responses
             
         Returns:
-            Configured LLM instance
+            Configured ChatGoogleGenerativeAI instance
         """
         if llm_type == LLMType.PLANNER:
-            return cls._create_planner_llm(temperature)
+            return cls._create_planner_llm(temperature, streaming)
         elif llm_type == LLMType.TUTOR:
             return cls._create_tutor_llm(temperature, streaming)
         else:
@@ -57,15 +75,19 @@ class LLMFactory:
     @classmethod
     def _create_planner_llm(
         cls, 
-        temperature: Optional[float] = None
-    ) -> BaseChatModel:
-        """Create LLM for planning/curriculum generation."""
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        temperature: Optional[float] = None,
+        streaming: bool = False
+    ) -> ChatGoogleGenerativeAI:
+        """
+        Create Gemini 2.5 Pro for planning/curriculum generation.
         
+        Uses lower temperature for structured, consistent output.
+        """
         return ChatGoogleGenerativeAI(
             model=settings.PLANNING_MODEL,
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=temperature if temperature is not None else 0.3,
+            streaming=streaming,
             convert_system_message_to_human=True,
         )
     
@@ -74,23 +96,137 @@ class LLMFactory:
         cls,
         temperature: Optional[float] = None,
         streaming: bool = False
-    ) -> BaseChatModel:
-        """Create LLM for interactive tutoring."""
-        from langchain_openai import ChatOpenAI
+    ) -> ChatGoogleGenerativeAI:
+        """
+        Create Gemini 2.5 Flash for interactive tutoring.
         
-        return ChatOpenAI(
+        Uses higher temperature for engaging, varied responses.
+        """
+        return ChatGoogleGenerativeAI(
             model=settings.TUTORING_MODEL,
-            api_key=settings.OPENAI_API_KEY,
+            google_api_key=settings.GOOGLE_API_KEY,
             temperature=temperature if temperature is not None else 0.7,
             streaming=streaming,
+            convert_system_message_to_human=True,
         )
 
 
-def get_planner_llm(temperature: float = 0.3) -> BaseChatModel:
-    """Convenience function to get planner LLM."""
-    return LLMFactory.get_llm(LLMType.PLANNER, temperature=temperature)
+def get_planner_llm(
+    temperature: float = 0.3,
+    streaming: bool = False
+) -> ChatGoogleGenerativeAI:
+    """
+    Get Gemini 2.5 Pro for planning.
+    
+    Args:
+        temperature: Sampling temperature (default 0.3 for consistency)
+        streaming: Enable streaming (usually False for JSON output)
+        
+    Returns:
+        Configured Gemini Pro instance
+    """
+    return LLMFactory.get_llm(LLMType.PLANNER, temperature=temperature, streaming=streaming)
 
 
-def get_tutor_llm(temperature: float = 0.7, streaming: bool = False) -> BaseChatModel:
-    """Convenience function to get tutor LLM."""
+def get_tutor_llm(
+    temperature: float = 0.7,
+    streaming: bool = False
+) -> ChatGoogleGenerativeAI:
+    """
+    Get Gemini 2.5 Flash for tutoring.
+    
+    Args:
+        temperature: Sampling temperature (default 0.7 for engagement)
+        streaming: Enable streaming responses
+        
+    Returns:
+        Configured Gemini Flash instance
+    """
     return LLMFactory.get_llm(LLMType.TUTOR, temperature=temperature, streaming=streaming)
+
+
+def should_stream(expected_tokens: int) -> bool:
+    """
+    Determine if streaming should be used based on expected output tokens.
+    
+    Strategy:
+    - If expected tokens < threshold: Use burst (immediate full response)
+    - If expected tokens >= threshold: Use streaming (token by token)
+    
+    Args:
+        expected_tokens: Estimated number of output tokens
+        
+    Returns:
+        True if streaming should be used, False for burst
+    """
+    return expected_tokens >= settings.STREAMING_TOKEN_THRESHOLD
+
+
+def estimate_response_tokens(message_type: str) -> int:
+    """
+    Estimate expected response tokens based on message type.
+    
+    Args:
+        message_type: Type of message/response expected
+        
+    Returns:
+        Estimated token count
+    """
+    # Token estimates for different response types
+    estimates = {
+        "acknowledgment": 20,  # "Got it!", "I understand"
+        "short_answer": 50,  # Brief factual answers
+        "clarification": 80,  # "Could you explain more?"
+        "explanation": 200,  # Teaching a concept
+        "detailed_explanation": 400,  # In-depth teaching
+        "lesson_intro": 300,  # Day/topic introduction
+        "day_summary": 250,  # End of day summary
+        "plan_generation": 2000,  # Full lesson plan
+        "default": 150,  # Default for tutoring responses
+    }
+    return estimates.get(message_type, estimates["default"])
+
+
+def classify_expected_response(user_message: Optional[str]) -> str:
+    """
+    Classify the expected response type based on user message.
+    
+    Args:
+        user_message: The user's input message
+        
+    Returns:
+        Response type classification
+    """
+    if not user_message:
+        return "lesson_intro"
+    
+    message_lower = user_message.lower().strip()
+    
+    # Short acknowledgments (expect short response)
+    acknowledgment_phrases = [
+        "ok", "okay", "got it", "i understand", "understood",
+        "yes", "no", "sure", "thanks", "thank you", "next",
+        "continue", "go on", "proceed"
+    ]
+    if message_lower in acknowledgment_phrases or len(message_lower) < 10:
+        return "acknowledgment"
+    
+    # Questions requesting explanation
+    explanation_triggers = [
+        "explain", "what is", "what are", "how does", "how do",
+        "why is", "why does", "tell me about", "describe",
+        "can you explain", "help me understand"
+    ]
+    if any(trigger in message_lower for trigger in explanation_triggers):
+        return "detailed_explanation"
+    
+    # Clarification requests
+    clarification_triggers = [
+        "what do you mean", "i don't understand", "confused",
+        "simpler", "example", "analogy"
+    ]
+    if any(trigger in message_lower for trigger in clarification_triggers):
+        return "explanation"
+    
+    # Default to standard explanation
+    return "default"

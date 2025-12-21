@@ -71,7 +71,6 @@ class SessionService:
                 status=SessionStatus.PLANNING.value,
                 current_day=1,
                 current_topic_index=0,
-                chat_history=[],
             )
             
             self.db.add(session)
@@ -211,121 +210,6 @@ class SessionService:
         except SQLAlchemyError as e:
             self.db.rollback()
             logger.error(f"Failed to update lesson plan: {str(e)}")
-            raise
-    
-    def update_chat_history(
-        self,
-        session_id: uuid.UUID,
-        chat_history: List[Dict[str, Any]],
-    ) -> Optional[LearningSession]:
-        """
-        Replace the entire chat history.
-        
-        Args:
-            session_id: Session identifier
-            chat_history: New chat history
-            
-        Returns:
-            Updated LearningSession or None
-        """
-        session = self.get_session(session_id)
-        if not session:
-            return None
-        
-        try:
-            session.chat_history = chat_history
-            session.updated_at = datetime.utcnow()
-            
-            self.db.commit()
-            self.db.refresh(session)
-            
-            return session
-            
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(f"Failed to update chat history: {str(e)}")
-            raise
-    
-    def append_to_chat_history(
-        self,
-        session_id: uuid.UUID,
-        human_message: str,
-        ai_message: str,
-    ) -> Optional[LearningSession]:
-        """
-        Append messages to chat history.
-        
-        Args:
-            session_id: Session identifier
-            human_message: User's message
-            ai_message: AI's response
-            
-        Returns:
-            Updated LearningSession or None
-        """
-        session = self.get_session(session_id)
-        if not session:
-            return None
-        
-        try:
-            history = session.chat_history or []
-            timestamp = datetime.utcnow().isoformat()
-            
-            history.append({
-                "role": "human",
-                "content": human_message,
-                "timestamp": timestamp,
-            })
-            history.append({
-                "role": "assistant",
-                "content": ai_message,
-                "timestamp": timestamp,
-            })
-            
-            session.chat_history = history
-            session.updated_at = datetime.utcnow()
-            
-            self.db.commit()
-            self.db.refresh(session)
-            
-            return session
-            
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(f"Failed to append to chat history: {str(e)}")
-            raise
-    
-    def update_memory_summary(
-        self,
-        session_id: uuid.UUID,
-        summary: str,
-    ) -> Optional[LearningSession]:
-        """
-        Update the memory summary.
-        
-        Args:
-            session_id: Session identifier
-            summary: Compressed conversation summary
-            
-        Returns:
-            Updated LearningSession or None
-        """
-        session = self.get_session(session_id)
-        if not session:
-            return None
-        
-        try:
-            session.memory_summary = summary
-            session.updated_at = datetime.utcnow()
-            
-            self.db.commit()
-            self.db.refresh(session)
-            
-            return session
-            
-        except SQLAlchemyError as e:
-            self.db.rollback()
-            logger.error(f"Failed to update memory summary: {str(e)}")
             raise
     
     def update_progress(

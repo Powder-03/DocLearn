@@ -2,17 +2,27 @@
 LangGraph Nodes for Generation Mode.
 
 Contains the node functions that perform the actual work:
-- plan_generator_node: Creates the curriculum
-- tutor_node: Handles interactive teaching
+- plan_generator_node: Creates the curriculum (Gemini 2.5 Pro)
+- tutor_node: Handles interactive teaching (Gemini 2.5 Flash)
+
+Streaming Strategy:
+- Expected tokens < 100: Burst response
+- Expected tokens >= 100: Streaming response
 """
 import json
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, AsyncGenerator, Optional
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from app.graphs.state import GenerationGraphState
-from app.core.llm_factory import get_planner_llm, get_tutor_llm
+from app.core.llm_factory import (
+    get_planner_llm, 
+    get_tutor_llm,
+    should_stream,
+    estimate_response_tokens,
+    classify_expected_response,
+)
 from app.core.prompts import (
     PLAN_GENERATION_SYSTEM_PROMPT,
     PLAN_GENERATION_PROMPT,
@@ -27,8 +37,9 @@ async def plan_generator_node(state: GenerationGraphState) -> Dict[str, Any]:
     """
     Node that generates the complete lesson plan.
     
-    Uses Gemini Flash for fast, structured JSON output.
+    Uses Gemini 2.5 Pro for powerful, structured JSON output.
     This node is only called once per session to create the curriculum.
+    Always uses burst mode (non-streaming) since we need complete JSON.
     
     Args:
         state: Current graph state
@@ -38,7 +49,8 @@ async def plan_generator_node(state: GenerationGraphState) -> Dict[str, Any]:
     """
     logger.info(f"Generating lesson plan for topic: {state['topic']}")
     
-    llm = get_planner_llm(temperature=0.3)
+    # Planning always uses burst mode (need complete JSON)
+    llm = get_planner_llm(temperature=0.3, streaming=False)
     
     # Build the planning prompt
     prompt = PLAN_GENERATION_PROMPT.format(
@@ -81,18 +93,32 @@ async def tutor_node(state: GenerationGraphState) -> Dict[str, Any]:
     """
     Node that handles interactive tutoring.
     
-    Uses GPT-4o for engaging, Socratic-style teaching.
-    This node is called for every chat message after the plan is ready.
+    Uses Gemini 2.5 Flash for fast, engaging Socratic-style teaching.
+    Automatically determines streaming vs burst based on expected response length.
+    
+    Streaming Strategy:
+    - Short responses (< 100 tokens): Burst mode (immediate full response)
+    - Long responses (>= 100 tokens): Streaming mode (token by token)
     
     Args:
         state: Current graph state with lesson_plan and user_message
         
     Returns:
-        Updated state with ai_response and updated chat_history
+        Updated state with ai_response, updated chat_history, and streaming flag
     """
     logger.info(f"Tutoring session - Day {state['current_day']}, Topic {state['current_topic_index']}")
     
-    llm = get_tutor_llm(temperature=0.7, streaming=False)
+    user_message = state.get("user_message")
+    
+    # Classify expected response and determine streaming mode
+    response_type = classify_expected_response(user_message)
+    expected_tokens = estimate_response_tokens(response_type)
+    use_streaming = should_stream(expected_tokens)
+    
+    logger.info(f"Response type: {response_type}, Expected tokens: {expected_tokens}, Streaming: {use_streaming}")
+    
+    # Get LLM with appropriate streaming setting
+    llm = get_tutor_llm(temperature=0.7, streaming=use_streaming)
     
     lesson_plan = state["lesson_plan"]
     current_day = state["current_day"]
@@ -134,8 +160,17 @@ async def tutor_node(state: GenerationGraphState) -> Dict[str, Any]:
         messages.append(HumanMessage(content=intro_prompt))
     
     try:
-        response = await llm.ainvoke(messages)
-        ai_response = response.content
+        # Handle streaming vs burst response
+        if use_streaming:
+            # Streaming mode - collect chunks
+            ai_response = ""
+            async for chunk in llm.astream(messages):
+                if chunk.content:
+                    ai_response += chunk.content
+        else:
+            # Burst mode - immediate full response
+            response = await llm.ainvoke(messages)
+            ai_response = response.content
         
         # Update chat history
         new_history = list(state["chat_history"])
@@ -156,6 +191,7 @@ async def tutor_node(state: GenerationGraphState) -> Dict[str, Any]:
             "should_advance_topic": should_advance,
             "is_day_complete": is_day_complete,
             "is_course_complete": is_course_complete,
+            "used_streaming": use_streaming,  # Include for debugging/logging
         }
         
     except Exception as e:

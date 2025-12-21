@@ -59,11 +59,25 @@ class ChatResponse(BaseModel):
 
 
 class ChatHistoryResponse(BaseModel):
-    """Response model for chat history."""
+    """Response model for chat history from MongoDB."""
     session_id: UUID
-    messages: List[ChatMessage]
-    total_messages: int
+    messages: List[ChatMessage] = Field(
+        default_factory=list, 
+        description="Recent messages in the buffer"
+    )
+    total_messages: int = Field(
+        0, 
+        description="Number of messages in current buffer"
+    )
     current_day: int
+    summaries: List[str] = Field(
+        default_factory=list,
+        description="Compressed summaries of previous conversations"
+    )
+    total_summaries: int = Field(
+        0,
+        description="Total number of conversation summaries"
+    )
 
 
 class StartLessonRequest(BaseModel):

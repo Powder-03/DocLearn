@@ -5,19 +5,25 @@ from typing import Optional
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql+psycopg2://user:password@host:port/db"
-    MONGODB_URL: str = "mongodb://user:password@host:port"
+    MONGODB_URL: str = "mongodb://localhost:27017"
+    MONGODB_DB_NAME: str = "doclearn"
     
     # Environment
     ENV: str = "development"
     DEBUG: bool = False
     
-    # LLM API Keys
-    OPENAI_API_KEY: Optional[str] = None
+    # LLM API Keys (Gemini only)
     GOOGLE_API_KEY: Optional[str] = None
     
-    # LLM Model Configuration
-    PLANNING_MODEL: str = "gemini-2.0-flash"  # Fast, cheap for planning
-    TUTORING_MODEL: str = "gpt-4o"  # Powerful for tutoring
+    # LLM Model Configuration (All Gemini)
+    PLANNING_MODEL: str = "gemini-2.5-pro"  # Powerful for curriculum generation
+    TUTORING_MODEL: str = "gemini-2.5-flash"  # Fast for interactive tutoring
+    
+    # Streaming Configuration
+    STREAMING_TOKEN_THRESHOLD: int = 100  # Use streaming if expected tokens > this
+    
+    # Memory Buffer Configuration
+    MEMORY_BUFFER_SIZE: int = 10  # Number of messages before summarization
     
     # Service Configuration
     SERVICE_NAME: str = "generation_service"

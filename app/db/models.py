@@ -2,7 +2,10 @@
 Database Models for the Generation Mode Microservice.
 
 This module defines SQLAlchemy ORM models for persisting learning sessions,
-lesson plans, and chat history.
+lesson plans, and progress tracking.
+
+Note: Chat history is stored in MongoDB with buffer-based summarization.
+See app/services/mongodb.py for chat storage implementation.
 """
 import uuid
 from datetime import datetime
@@ -38,9 +41,10 @@ class LearningSession(Base):
     This is the central table that stores:
     - User's learning constraints (topic, days, time)
     - Generated lesson plan (JSON)
-    - Chat history for context
-    - Memory summary for LLM context compression
     - Current progress tracking
+    
+    Note: Chat history is stored in MongoDB for efficient buffer-based
+    summarization. See app/services/mongodb.py.
     """
     __tablename__ = "learning_sessions"
 
@@ -80,10 +84,6 @@ class LearningSession(Base):
     
     # Generated Content
     lesson_plan = Column(JSONB, nullable=True)  # Complete curriculum JSON
-    
-    # Conversation State
-    chat_history = Column(JSONB, nullable=True, default=list)  # List of message dicts
-    memory_summary = Column(Text, nullable=True)  # Compressed context for LLM
     
     # Progress Tracking
     current_day = Column(Integer, nullable=False, default=1)
