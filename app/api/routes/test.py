@@ -156,11 +156,21 @@ async def postgres_status() -> Dict[str, Any]:
     """
     import asyncio
     from app.db.session import get_session_local
+    from app.core.config import settings
     
     def _check_postgres():
         """Sync function to check postgres - runs in executor."""
         db = None
         try:
+            # Log connection string (hide password)
+            db_url = settings.DATABASE_URL
+            if db_url:
+                # Mask password in URL for logging
+                import re
+                masked_url = re.sub(r':([^:@]+)@', ':***@', db_url)
+            else:
+                masked_url = "NOT SET"
+            
             db = get_session_local()
             # Simple query to check connection
             result = db.execute(text("SELECT 1 as test"))
@@ -174,14 +184,18 @@ async def postgres_status() -> Dict[str, Any]:
                 "status": "connected",
                 "postgres_connected": True,
                 "test_query": row[0] if row else None,
-                "database_version": version[:50] if version else None
+                "database_version": version[:50] if version else None,
+                "connection_string": masked_url
             }
         except Exception as e:
+            import traceback
             return {
                 "status": "error",
                 "postgres_connected": False,
                 "error": str(e),
-                "error_type": type(e).__name__
+                "error_type": type(e).__name__,
+                "traceback": traceback.format_exc()[:500],
+                "connection_string": masked_url if 'masked_url' in locals() else "unknown"
             }
         finally:
             if db:
