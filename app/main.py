@@ -46,31 +46,36 @@ async def lifespan(app: FastAPI):
     log.info(f"Streaming Threshold: {settings.STREAMING_TOKEN_THRESHOLD} tokens")
     log.info(f"Memory Buffer Size: {settings.MEMORY_BUFFER_SIZE} messages")
     
-    # Run database migrations
+    # Run database migrations in executor with timeout (non-blocking)
+    import asyncio
     try:
-        # Use Alembic migrations if available, fallback to create_all
-        run_migrations()
+        loop = asyncio.get_event_loop()
+        await asyncio.wait_for(
+            loop.run_in_executor(None, run_migrations),
+            timeout=20.0
+        )
         log.info("PostgreSQL migrations applied successfully")
+    except asyncio.TimeoutError:
+        log.warning("Migrations timed out (20s) - using existing schema")
     except Exception as e:
-        log.warning(f"Alembic migrations failed, falling back to create_all: {e}")
+        log.warning(f"Migrations failed: {str(e)[:100]}")
         try:
-            init_db()
+            await asyncio.wait_for(
+                loop.run_in_executor(None, init_db),
+                timeout=10.0
+            )
             log.info("PostgreSQL database initialized with create_all")
         except Exception as e2:
-            log.error(f"PostgreSQL database initialization failed: {e2}")
+            log.error(f"PostgreSQL initialization failed: {str(e2)[:100]}")
     
-    # Initialize MongoDB (required for chat storage)
-    # Use asyncio.wait_for to prevent hanging on connection timeout
+    # Initialize MongoDB (with shorter timeout for faster startup)
     try:
-        import asyncio
-        await asyncio.wait_for(MongoDBService.connect(), timeout=10.0)
+        await asyncio.wait_for(MongoDBService.connect(), timeout=5.0)
         log.info(f"MongoDB connected: {settings.MONGODB_DB_NAME}")
     except asyncio.TimeoutError:
-        log.error("MongoDB connection timed out after 10 seconds")
-        log.warning("⚠️  Chat storage will not work without MongoDB!")
+        log.warning("MongoDB timeout (5s) - chat may not work")
     except Exception as e:
-        log.error(f"MongoDB connection failed: {e}")
-        log.warning("⚠️  Chat storage will not work without MongoDB!")
+        log.warning(f"MongoDB failed: {str(e)[:100]}")
     
     # Check LLM configuration (Gemini only)
     if not settings.GOOGLE_API_KEY:
