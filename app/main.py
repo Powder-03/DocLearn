@@ -33,12 +33,43 @@ async def lifespan(app: FastAPI):
     Manages startup and shutdown tasks.
     """
     # =========================================================================
-    # STARTUP - Minimal to ensure fast startup for Cloud Run
+    # STARTUP
     # =========================================================================
     log.info("=" * 60)
     log.info(f"Starting {settings.SERVICE_NAME} v{settings.SERVICE_VERSION}")
     log.info(f"Environment: {settings.ENV}")
-    log.info("Fast startup mode enabled - services initialize on first use")
+    log.info("=" * 60)
+    
+    # Run database migrations (fix: disable_existing_loggers=False in alembic/env.py)
+    try:
+        run_migrations()
+        log.info("✓ PostgreSQL migrations applied")
+    except Exception as e:
+        log.warning(f"Migrations failed, using create_all: {e}")
+        try:
+            init_db()
+            log.info("✓ PostgreSQL initialized")
+        except Exception as e2:
+            log.error(f"❌ PostgreSQL failed: {e2}")
+    
+    # Initialize MongoDB
+    try:
+        import asyncio
+        await asyncio.wait_for(MongoDBService.connect(), timeout=10.0)
+        log.info(f"✓ MongoDB connected: {settings.MONGODB_DB_NAME}")
+    except asyncio.TimeoutError:
+        log.error("❌ MongoDB timeout")
+    except Exception as e:
+        log.error(f"❌ MongoDB failed: {e}")
+    
+    # Check API key
+    if settings.GOOGLE_API_KEY:
+        log.info("✓ Gemini API key configured")
+    else:
+        log.warning("⚠️  No API key - AI features disabled")
+    
+    log.info("=" * 60)
+    log.info("Service ready")
     log.info("=" * 60)
     
     yield
@@ -48,48 +79,18 @@ async def lifespan(app: FastAPI):
     # =========================================================================
     log.info("Shutting down...")
     
-    # Close MongoDB connection
     try:
         await MongoDBService.disconnect()
-        log.info("MongoDB connection closed")
+        log.info("MongoDB disconnected")
     except Exception as e:
         log.debug(f"MongoDB disconnect: {e}")
     
     log.info("Shutdown complete")
 
 
-async def initialize_services():
-    """
-    Initialize services lazily when first needed.
-    
-    This runs on first actual request, not during container startup.
-    """
-    import asyncio
-    
-    log.info("Initializing services...")
-    
-    # Run database migrations (synchronous operation)
-    try:
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, run_migrations)
-        log.info("✓ PostgreSQL migrations applied")
-    except Exception as e:
-        log.warning(f"Migrations failed: {e}")
-        try:
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, init_db)
-            log.info("✓ PostgreSQL initialized")
-        except Exception as e2:
-            log.error(f"❌ PostgreSQL failed: {e2}")
-    
-    # Initialize MongoDB
-    try:
-        await asyncio.wait_for(MongoDBService.connect(), timeout=10.0)
-        log.info(f"✓ MongoDB connected: {settings.MONGODB_DB_NAME}")
-    except asyncio.TimeoutError:
-        log.error("❌ MongoDB timeout")
-    except Exception as e:
-        log.error(f"❌ MongoDB failed: {e}")
+# Removed - no longer needed with logging fix
+# async def initialize_services():
+#     ...
 
 
 # =============================================================================
@@ -142,14 +143,6 @@ This service provides:
     app.include_router(api_router)
     app.include_router(health_router)
     app.include_router(test_router)
-    
-    # Add startup event to initialize services after server is ready
-    @app.on_event("startup")
-    async def startup_event():
-        """Initialize services after server is listening."""
-        import asyncio
-        # Run initialization in background, don't await
-        asyncio.create_task(initialize_services())
     
     # Root endpoint
     @app.get("/", tags=["Root"])

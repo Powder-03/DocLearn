@@ -30,7 +30,7 @@ config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Add your model's MetaData object here for 'autogenerate' support
 # This allows Alembic to detect changes in your models
