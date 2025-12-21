@@ -46,31 +46,8 @@ async def lifespan(app: FastAPI):
     log.info(f"Streaming Threshold: {settings.STREAMING_TOKEN_THRESHOLD} tokens")
     log.info(f"Memory Buffer Size: {settings.MEMORY_BUFFER_SIZE} messages")
     
-    # Run database migrations
-    try:
-        # Use Alembic migrations if available, fallback to create_all
-        run_migrations()
-        log.info("PostgreSQL migrations applied successfully")
-    except Exception as e:
-        log.warning(f"Alembic migrations failed, falling back to create_all: {e}")
-        try:
-            init_db()
-            log.info("PostgreSQL database initialized with create_all")
-        except Exception as e2:
-            log.error(f"PostgreSQL database initialization failed: {e2}")
-    
-    # Initialize MongoDB (required for chat storage)
-    # Use asyncio.wait_for to prevent hanging on connection timeout
-    try:
-        import asyncio
-        await asyncio.wait_for(MongoDBService.connect(), timeout=10.0)
-        log.info(f"MongoDB connected: {settings.MONGODB_DB_NAME}")
-    except asyncio.TimeoutError:
-        log.error("MongoDB connection timed out after 10 seconds")
-        log.warning("⚠️  Chat storage will not work without MongoDB!")
-    except Exception as e:
-        log.error(f"MongoDB connection failed: {e}")
-        log.warning("⚠️  Chat storage will not work without MongoDB!")
+    # Log startup strategy
+    log.info("Fast startup mode: Background initialization of dependencies")
     
     # Check LLM configuration (Gemini only)
     if not settings.GOOGLE_API_KEY:
@@ -82,6 +59,10 @@ async def lifespan(app: FastAPI):
     log.info("Service is ready to accept requests")
     log.info("=" * 60)
     
+    # Run database setup in background (non-blocking)
+    import asyncio
+    asyncio.create_task(initialize_services())
+    
     yield
     
     # =========================================================================
@@ -90,10 +71,53 @@ async def lifespan(app: FastAPI):
     log.info("Shutting down...")
     
     # Close MongoDB connection
-    await MongoDBService.disconnect()
-    log.info("MongoDB connection closed")
+    try:
+        await MongoDBService.disconnect()
+        log.info("MongoDB connection closed")
+    except Exception as e:
+        log.warning(f"Error closing MongoDB: {e}")
     
     log.info("Shutdown complete")
+
+
+async def initialize_services():
+    """
+    Initialize services in background after app has started.
+    
+    This prevents blocking the initial startup and allows the container
+    to pass health checks quickly on Cloud Run.
+    """
+    import asyncio
+    
+    log.info("Starting background service initialization...")
+    
+    # Run database migrations (synchronous operation)
+    try:
+        # Run in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, run_migrations)
+        log.info("✓ PostgreSQL migrations applied successfully")
+    except Exception as e:
+        log.warning(f"Alembic migrations failed, falling back to create_all: {e}")
+        try:
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, init_db)
+            log.info("✓ PostgreSQL database initialized with create_all")
+        except Exception as e2:
+            log.error(f"❌ PostgreSQL database initialization failed: {e2}")
+    
+    # Initialize MongoDB (required for chat storage)
+    try:
+        await asyncio.wait_for(MongoDBService.connect(), timeout=10.0)
+        log.info(f"✓ MongoDB connected: {settings.MONGODB_DB_NAME}")
+    except asyncio.TimeoutError:
+        log.error("❌ MongoDB connection timed out after 10 seconds")
+        log.warning("⚠️  Chat storage will not work without MongoDB!")
+    except Exception as e:
+        log.error(f"❌ MongoDB connection failed: {e}")
+        log.warning("⚠️  Chat storage will not work without MongoDB!")
+    
+    log.info("Background service initialization complete")
 
 
 # =============================================================================
