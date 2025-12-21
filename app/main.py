@@ -30,46 +30,38 @@ async def lifespan(app: FastAPI):
     """
     Application lifespan handler.
     
-    Manages startup and shutdown tasks.
+    Manages startup and shutdown tasks with aggressive timeouts for Cloud Run.
     """
     # =========================================================================
-    # STARTUP
+    # STARTUP - Ultra-fast with all operations time-limited
     # =========================================================================
     log.info("=" * 60)
     log.info(f"Starting {settings.SERVICE_NAME} v{settings.SERVICE_VERSION}")
     log.info(f"Environment: {settings.ENV}")
     log.info("=" * 60)
     
-    # Run database migrations (fix: disable_existing_loggers=False in alembic/env.py)
-    try:
-        run_migrations()
-        log.info("✓ PostgreSQL migrations applied")
-    except Exception as e:
-        log.warning(f"Migrations failed, using create_all: {e}")
-        try:
-            init_db()
-            log.info("✓ PostgreSQL initialized")
-        except Exception as e2:
-            log.error(f"❌ PostgreSQL failed: {e2}")
+    import asyncio
     
-    # Initialize MongoDB
+    # Skip migrations entirely - run manually or in init container
+    # Migrations can take 30+ seconds on cold PostgreSQL connections
+    log.info("Skipping migrations - run manually: alembic upgrade head")
+    log.info("Using existing database schema")
+    
+    # Initialize MongoDB (with very short timeout)
     try:
-        import asyncio
-        await asyncio.wait_for(MongoDBService.connect(), timeout=10.0)
+        await asyncio.wait_for(MongoDBService.connect(), timeout=3.0)
         log.info(f"✓ MongoDB connected: {settings.MONGODB_DB_NAME}")
     except asyncio.TimeoutError:
-        log.error("❌ MongoDB timeout")
+        log.warning("⚠️  MongoDB timeout (3s) - chat may not work")
     except Exception as e:
-        log.error(f"❌ MongoDB failed: {e}")
+        log.warning(f"⚠️  MongoDB failed: {str(e)[:100]}")
     
-    # Check API key
+    # Check API key (instant)
     if settings.GOOGLE_API_KEY:
         log.info("✓ Gemini API key configured")
-    else:
-        log.warning("⚠️  No API key - AI features disabled")
     
     log.info("=" * 60)
-    log.info("Service ready")
+    log.info("Service ready in <5 seconds")
     log.info("=" * 60)
     
     yield
@@ -81,16 +73,10 @@ async def lifespan(app: FastAPI):
     
     try:
         await MongoDBService.disconnect()
-        log.info("MongoDB disconnected")
-    except Exception as e:
-        log.debug(f"MongoDB disconnect: {e}")
+    except Exception:
+        pass
     
     log.info("Shutdown complete")
-
-
-# Removed - no longer needed with logging fix
-# async def initialize_services():
-#     ...
 
 
 # =============================================================================

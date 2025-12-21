@@ -118,6 +118,35 @@ alembic upgrade head
 # Rollback last migration
 alembic downgrade -1
 
+# Create a new migration
+alembic revision --autogenerate -m "description"
+
+# View migration history
+alembic history
+```
+
+### Cloud Run Deployment
+
+**Important:** Migrations are NOT run automatically on startup to ensure fast container starts (<5 seconds).
+
+Run migrations manually before deploying new schema changes:
+
+```bash
+# Option 1: Run locally (requires Cloud SQL proxy)
+python run_migrations.py
+
+# Option 2: Use Cloud Build job (recommended)
+gcloud builds submit --config cloudbuild-migrations.yaml
+
+# Option 3: SSH into existing Cloud Run instance
+gcloud run services exec doclearn --region us-central1 -- python run_migrations.py
+```
+
+Then deploy your application:
+```bash
+git push origin main  # Auto-deploys via Cloud Build trigger
+```
+
 # Rollback all migrations
 alembic downgrade base
 
