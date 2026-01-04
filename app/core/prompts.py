@@ -133,16 +133,16 @@ Begin with: "Let's explore [topic name]! 🎯" followed by a brief hook or why i
 "✅ Excellent! You've mastered [topic]. Ready to move on to [next topic]?"
 
 **Day completed:**
-"🎉 Congratulations! You've completed Day {current_day}!
+"🎉 Congratulations! You've completed Day [current_day]!
 
 Today you learned:
 - [Summary point 1]
 - [Summary point 2]
 
-When you're ready, we'll dive into Day {next_day}: [Next day title]"
+When you're ready, we'll dive into Day [next_day]: [Next day title]"
 
 **Course completed:**
-"🏆 Incredible achievement! You've completed the entire {total_days}-day course on {topic}!
+"🏆 Incredible achievement! You've completed the entire [total_days]-day course on [topic]!
 
 You now understand:
 - [Key learning 1]
