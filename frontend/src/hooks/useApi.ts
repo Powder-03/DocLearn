@@ -1,29 +1,23 @@
 import { useAuth } from '@clerk/clerk-react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { setTokenGetter } from '@/lib/api'
 
 /**
  * Hook to set up API authentication with Clerk token
  */
 export function useApi() {
-  const { getToken, isSignedIn } = useAuth()
+  const { getToken, isSignedIn, isLoaded } = useAuth()
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    const setupToken = async () => {
-      if (isSignedIn) {
-        const token = await getToken()
-        if (token) {
-          ;(window as unknown as { __clerk_token?: string }).__clerk_token = token
-        }
-      }
+    if (isLoaded && isSignedIn) {
+      // Set the token getter function for axios interceptor
+      setTokenGetter(getToken)
+      setIsReady(true)
+    } else if (isLoaded && !isSignedIn) {
+      setIsReady(true)
     }
+  }, [getToken, isSignedIn, isLoaded])
 
-    setupToken()
-
-    // Refresh token periodically
-    const interval = setInterval(setupToken, 1000 * 60 * 4) // Every 4 minutes
-
-    return () => clearInterval(interval)
-  }, [getToken, isSignedIn])
-
-  return { getToken, isSignedIn }
+  return { getToken, isSignedIn, isReady }
 }

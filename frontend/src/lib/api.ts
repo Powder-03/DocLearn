@@ -8,13 +8,26 @@ const api = axios.create({
   },
 })
 
+// Token getter function - will be set by useApi hook
+let getTokenFunction: (() => Promise<string | null>) | null = null
+
+export function setTokenGetter(getter: () => Promise<string | null>) {
+  getTokenFunction = getter
+}
+
 // Request interceptor to add auth token
 api.interceptors.request.use(
   async (config) => {
-    // Get token from Clerk - this will be set by the useApi hook
-    const token = (window as unknown as { __clerk_token?: string }).__clerk_token
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
+    // Get fresh token from Clerk
+    if (getTokenFunction) {
+      try {
+        const token = await getTokenFunction()
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`
+        }
+      } catch (error) {
+        console.error('Failed to get auth token:', error)
+      }
     }
     return config
   },
