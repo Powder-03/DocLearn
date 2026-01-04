@@ -11,30 +11,22 @@ class Settings(BaseSettings):
     ENV: str = "development"
     DEBUG: bool = False
     
-    # Clerk Authentication
-    # Get these from your Clerk Dashboard: https://dashboard.clerk.com
-    # CLERK_SECRET_KEY is used for backend API calls (optional)
-    CLERK_SECRET_KEY: Optional[str] = None
-    # CLERK_JWKS_URL is your Clerk instance's JWKS endpoint for JWT verification
-    # Format: https://<your-clerk-frontend-api>.clerk.accounts.dev/.well-known/jwks.json
-    CLERK_JWKS_URL: Optional[str] = None
-    # CLERK_ISSUER is your Clerk instance URL for JWT issuer validation
-    # Format: https://<your-clerk-frontend-api>.clerk.accounts.dev
-    CLERK_ISSUER: Optional[str] = None
+    # JWT Authentication (Simple)
+    # Generate a strong secret for production: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    JWT_SECRET: str = "change-this-secret-in-production"
     
     # LLM API Keys (Gemini only)
     GOOGLE_API_KEY: Optional[str] = None
     
     # LLM Model Configuration (All Gemini)
-    # Available models: gemini-2.5-pro, gemini-2.5-flash, gemini-1.5-pro, gemini-1.5-flash
-    PLANNING_MODEL: str = "gemini-2.5-pro"  # Powerful for curriculum generation
-    TUTORING_MODEL: str = "gemini-2.5-flash"  # Fast for interactive tutoring
+    PLANNING_MODEL: str = "gemini-2.5-pro"
+    TUTORING_MODEL: str = "gemini-2.5-flash"
     
     # Streaming Configuration
-    STREAMING_TOKEN_THRESHOLD: int = 100  # Use streaming if expected tokens > this
+    STREAMING_TOKEN_THRESHOLD: int = 100
     
     # Memory Buffer Configuration
-    MEMORY_BUFFER_SIZE: int = 10  # Number of messages before summarization
+    MEMORY_BUFFER_SIZE: int = 10
     
     # Service Configuration
     SERVICE_NAME: str = "generation_service"

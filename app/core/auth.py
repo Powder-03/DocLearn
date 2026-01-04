@@ -1,18 +1,19 @@
 """
-Clerk Authentication Module.
+Simple JWT Authentication Module.
 
-Provides JWT validation for Clerk-authenticated requests.
-Frontend will use Clerk SDK to get tokens, backend validates them here.
+Provides basic JWT-based authentication for development and testing.
+No external auth providers required.
 """
 import logging
+import secrets
+import hashlib
+from datetime import datetime, timedelta
 from typing import Optional
 from dataclasses import dataclass
 
-import httpx
-from fastapi import HTTPException, Security, Depends
+from fastapi import HTTPException, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
-from jwt import PyJWKClient
 
 from app.core.config import settings
 
@@ -20,128 +21,119 @@ logger = logging.getLogger(__name__)
 
 # HTTP Bearer token security scheme
 security = HTTPBearer(
-    scheme_name="Clerk JWT",
-    description="JWT token from Clerk authentication",
+    scheme_name="JWT",
+    description="JWT token for authentication",
     auto_error=True,
 )
 
-# Cache for JWKS client
-_jwks_client: Optional[PyJWKClient] = None
+# JWT Configuration
+JWT_SECRET = settings.JWT_SECRET or secrets.token_urlsafe(32)
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
 
 
 @dataclass
-class ClerkUser:
-    """Authenticated user from Clerk JWT."""
+class AuthUser:
+    """Authenticated user from JWT."""
     user_id: str
-    email: Optional[str] = None
-    first_name: Optional[str] = None
-    last_name: Optional[str] = None
-    image_url: Optional[str] = None
-    
-    @property
-    def full_name(self) -> str:
-        """Get user's full name."""
-        parts = [self.first_name, self.last_name]
-        return " ".join(p for p in parts if p) or "User"
+    email: str
+    name: Optional[str] = None
 
 
-def get_jwks_client() -> PyJWKClient:
+# Backward compatibility alias
+ClerkUser = AuthUser
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using SHA-256 with salt."""
+    salt = settings.JWT_SECRET or "default-salt"
+    return hashlib.sha256(f"{password}{salt}".encode()).hexdigest()
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """Verify a password against its hash."""
+    return hash_password(password) == hashed
+
+
+def create_access_token(user_id: str, email: str, name: Optional[str] = None) -> str:
     """
-    Get or create JWKS client for Clerk.
+    Create a JWT access token.
     
-    Clerk's JWKS endpoint is used to verify JWT signatures.
+    Args:
+        user_id: User's unique identifier
+        email: User's email
+        name: User's display name
+        
+    Returns:
+        JWT token string
     """
-    global _jwks_client
-    
-    if _jwks_client is None:
-        if not settings.CLERK_JWKS_URL:
-            raise HTTPException(
-                status_code=500,
-                detail="Clerk JWKS URL not configured"
-            )
-        _jwks_client = PyJWKClient(
-            settings.CLERK_JWKS_URL,
-            cache_keys=True,
-            lifespan=3600,  # Cache keys for 1 hour
-        )
-    
-    return _jwks_client
+    expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "name": name,
+        "exp": expire,
+        "iat": datetime.utcnow(),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-async def verify_clerk_token(
+def decode_token(token: str) -> dict:
+    """
+    Decode and verify a JWT token.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Token payload
+        
+    Raises:
+        HTTPException: If token is invalid or expired
+    """
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+
+
+async def verify_token(
     credentials: HTTPAuthorizationCredentials = Security(security),
-) -> ClerkUser:
+) -> AuthUser:
     """
-    Verify Clerk JWT and extract user information.
+    Verify JWT and extract user information.
     
     This is a FastAPI dependency that:
     1. Extracts the Bearer token from Authorization header
-    2. Verifies the JWT signature using Clerk's JWKS
-    3. Validates token claims (expiry, issuer, etc.)
-    4. Returns a ClerkUser object with user details
-    
-    Usage:
-        @router.get("/protected")
-        async def protected_route(user: ClerkUser = Depends(verify_clerk_token)):
-            return {"user_id": user.user_id}
+    2. Verifies the JWT signature
+    3. Validates token claims (expiry, etc.)
+    4. Returns an AuthUser object with user details
     """
     token = credentials.credentials
     
     try:
-        # Get the signing key from Clerk's JWKS
-        jwks_client = get_jwks_client()
-        signing_key = jwks_client.get_signing_key_from_jwt(token)
+        payload = decode_token(token)
         
-        # Decode and verify the token
-        payload = jwt.decode(
-            token,
-            signing_key.key,
-            algorithms=["RS256"],
-            options={
-                "verify_exp": True,
-                "verify_aud": False,  # Clerk doesn't always set audience
-                "verify_iss": True,
-            },
-            issuer=settings.CLERK_ISSUER,
-        )
-        
-        # Extract user information from Clerk JWT claims
-        # Clerk uses 'sub' for user ID
         user_id = payload.get("sub")
-        if not user_id:
+        email = payload.get("email")
+        
+        if not user_id or not email:
             raise HTTPException(
                 status_code=401,
-                detail="Invalid token: missing user ID"
+                detail="Invalid token: missing user information"
             )
         
-        # Extract additional claims (if present)
-        # These may be in the token or need to be fetched from Clerk API
-        return ClerkUser(
+        return AuthUser(
             user_id=user_id,
-            email=payload.get("email"),
-            first_name=payload.get("first_name"),
-            last_name=payload.get("last_name"),
-            image_url=payload.get("image_url"),
+            email=email,
+            name=payload.get("name"),
         )
         
-    except jwt.ExpiredSignatureError:
-        logger.warning("Expired JWT token")
-        raise HTTPException(
-            status_code=401,
-            detail="Token has expired"
-        )
-    except jwt.InvalidIssuerError:
-        logger.warning("Invalid JWT issuer")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid token issuer"
-        )
-    except jwt.InvalidTokenError as e:
-        logger.warning(f"Invalid JWT token: {str(e)}")
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid authentication token"
-        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception(f"Token verification error: {str(e)}")
         raise HTTPException(
@@ -154,20 +146,19 @@ async def get_optional_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(
         HTTPBearer(auto_error=False)
     ),
-) -> Optional[ClerkUser]:
+) -> Optional[AuthUser]:
     """
     Optional authentication - returns None if no token provided.
-    
-    Useful for endpoints that work differently for authenticated vs anonymous users.
     """
     if credentials is None:
         return None
     
     try:
-        return await verify_clerk_token(credentials)
+        return await verify_token(credentials)
     except HTTPException:
         return None
 
 
-# Alias for cleaner imports
-get_current_user = verify_clerk_token
+# Aliases for cleaner imports
+get_current_user = verify_token
+verify_clerk_token = verify_token  # Backward compatibility
