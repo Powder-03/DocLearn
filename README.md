@@ -1,6 +1,6 @@
 # DocLearn - AI-Powered Personalized Learning Platform
 
-A production-ready AI microservice that provides personalized curriculum generation and interactive tutoring using Google Gemini models.
+A production-ready AI microservice that provides personalized curriculum generation and interactive tutoring using Google Gemini models. Includes a React TypeScript frontend for a complete learning experience.
 
 ## Features
 
@@ -9,56 +9,66 @@ A production-ready AI microservice that provides personalized curriculum generat
 - **Adaptive Streaming**: Burst mode for short responses (<100 tokens), streaming for longer explanations
 - **Buffer-Based Memory**: 10-message buffer with automatic summarization for efficient context management
 - **Progress Tracking**: Stateful learning across multiple sessions with day/topic progression
+- **Modern React Frontend**: TypeScript, TailwindCSS, and Clerk authentication
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   FastAPI App   │────▶│    MongoDB      │────▶│  Sessions       │
-│                 │     │                 │     │  Lesson Plans   │
-│  - Sessions     │     │  (All Storage)  │     │  Chat History   │
-│  - Chat         │     │                 │     │  Summaries      │
-│  - Health       │     └─────────────────┘     └─────────────────┘
-└─────────────────┘
-        │
-        ▼
-┌─────────────────┐
-│  Google Gemini  │
-│  - 2.5 Pro      │ ◀── Planning (curriculum generation)
-│  - 2.5 Flash    │ ◀── Tutoring (interactive teaching)
-└─────────────────┘
+│  React Frontend │────▶│   FastAPI App   │────▶│    MongoDB      │
+│  (TypeScript)   │     │                 │     │  (All Storage)  │
+│                 │     │  - Sessions     │     │                 │
+│  - Clerk Auth   │     │  - Chat         │     └─────────────────┘
+│  - React Query  │     │  - Health       │
+│  - TailwindCSS  │     └────────┬────────┘
+└─────────────────┘              │
+                                 ▼
+                        ┌─────────────────┐
+                        │  Google Gemini  │
+                        │  - 2.5 Pro      │ ◀── Planning
+                        │  - 2.5 Flash    │ ◀── Tutoring
+                        └─────────────────┘
 ```
 
 ## Project Structure
 
 ```
-app/
-├── core/
-│   ├── config.py          # Settings (Gemini, MongoDB, buffer size)
-│   ├── llm_factory.py     # Gemini LLM initialization
-│   └── prompts.py         # System prompts for tutor/planner
-├── services/
-│   ├── session_service.py # Session CRUD (MongoDB)
-│   ├── chat_service.py    # Chat orchestration
-│   ├── plan_service.py    # Plan generation
-│   ├── memory.py          # Buffer summarization
-│   └── mongodb.py         # MongoDB connection & chat storage
-├── graphs/
-│   ├── generation_graph.py # LangGraph state machine
-│   ├── nodes.py           # Plan & tutor nodes
-│   └── state.py           # Graph state definition
-├── api/
-│   └── routes/
-│       ├── sessions.py    # Session endpoints
-│       ├── chat.py        # Chat endpoints (SSE streaming)
-│       ├── health.py      # Health checks
-│       └── test.py        # Diagnostic test endpoints
-└── main.py                # FastAPI application factory
+doclearn/
+├── app/                      # Backend (FastAPI)
+│   ├── core/                 # Configuration, prompts, LLM factory
+│   ├── services/             # Business logic services
+│   ├── graphs/               # LangGraph state machines
+│   ├── api/routes/           # API endpoints
+│   └── main.py               # FastAPI application
+├── frontend/                 # Frontend (React TypeScript)
+│   ├── src/
+│   │   ├── components/       # Reusable UI components
+│   │   ├── pages/            # Page components
+│   │   ├── hooks/            # Custom React hooks
+│   │   ├── services/         # API service functions
+│   │   └── types/            # TypeScript types
+│   ├── package.json
+│   └── Dockerfile
+├── Dockerfile                # Backend only
+├── Dockerfile.combined       # Frontend + Backend (production)
+├── docker-compose.yml        # Local development
+├── cloudbuild.yaml           # Google Cloud Build
+└── README.md
 ```
 
 ## Running the Application
 
+### Prerequisites
+
+- Python 3.11+
+- Node.js 18+
+- Docker and Docker Compose
+- Google Cloud API Key (for Gemini)
+- Clerk account (for authentication)
+
 ### Local Development
+
+#### Backend Only
 
 1. **Install dependencies:**
    ```bash
@@ -68,7 +78,7 @@ app/
 2. **Set up environment variables:**
    ```bash
    cp .env.example .env
-   # Edit .env with your Google API key and MongoDB URL
+   # Edit .env with your Google API key, MongoDB URL, and Clerk credentials
    ```
 
 3. **Start MongoDB with Docker:**
@@ -76,25 +86,55 @@ app/
    docker-compose up -d mongodb
    ```
 
-4. **Run the application:**
+4. **Run the backend:**
    ```bash
-   uvicorn app.main:app --reload
+   uvicorn app.main:app --reload --port 8080
    ```
-   
-   The application will be available at `http://127.0.0.1:8000`
+
+#### Frontend Only
+
+1. **Navigate to frontend:**
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. **Set up environment:**
+   ```bash
+   cp .env.example .env
+   # Add your Clerk publishable key
+   ```
+
+3. **Run the frontend:**
+   ```bash
+   npm run dev
+   ```
+
+   Frontend: http://localhost:3000
+   Backend API: http://localhost:8080
 
 ### Using Docker Compose (Full Stack)
 
 ```bash
+# Create .env file with all required variables
+cat > .env << EOF
+GOOGLE_API_KEY=your_gemini_api_key
+CLERK_SECRET_KEY=your_clerk_secret_key
+CLERK_JWKS_URL=https://your-clerk.clerk.accounts.dev/.well-known/jwks.json
+CLERK_ISSUER=https://your-clerk.clerk.accounts.dev
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_your_key
+EOF
+
 # Start all services
 docker-compose up -d
 
-# Start with admin UI (Mongo Express)
-docker-compose --profile dev up -d
-
 # View logs
-docker-compose logs -f app
+docker-compose logs -f
 ```
+
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- Mongo Express: http://localhost:8081
 
 ## API Endpoints
 
@@ -153,25 +193,45 @@ Buffer: [msg11, msg12, ..., msg20] → Summarize → [Summary 1, Summary 2]
 
 ## Deployment
 
-### Google Cloud Run
+### Google Cloud Run (Combined Frontend + Backend)
+
+The recommended deployment uses `Dockerfile.combined` to build and deploy both frontend and backend as a single container.
 
 1. **Enable required APIs:**
-   - Cloud Build API
-   - Cloud Run API
-   - Secret Manager API
-
-2. **Create secrets in Secret Manager:**
-   - `doclearn-mongo-url`: MongoDB connection string (e.g., MongoDB Atlas)
-   - `doclearn-gemini-key`: Google API key
-
-3. **Deploy:**
    ```bash
-   gcloud builds submit --config cloudbuild.yaml .
+   gcloud services enable cloudbuild.googleapis.com
+   gcloud services enable run.googleapis.com
+   gcloud services enable secretmanager.googleapis.com
    ```
 
-The `cloudbuild.yaml` is configured to:
-- Build Docker image
-- Push to Container Registry
+2. **Create secrets in Secret Manager:**
+   ```bash
+   # MongoDB connection string (e.g., MongoDB Atlas)
+   echo -n "mongodb+srv://..." | gcloud secrets create doclearn-mongo-url --data-file=-
+   
+   # Google Gemini API key
+   echo -n "your-gemini-key" | gcloud secrets create doclearn-gemini-key --data-file=-
+   
+   # Clerk secrets
+   echo -n "sk_test_..." | gcloud secrets create doclearn-clerk-secret --data-file=-
+   echo -n "https://your-clerk.clerk.accounts.dev/.well-known/jwks.json" | gcloud secrets create doclearn-clerk-jwks-url --data-file=-
+   echo -n "https://your-clerk.clerk.accounts.dev" | gcloud secrets create doclearn-clerk-issuer --data-file=-
+   ```
+
+3. **Deploy using Cloud Build:**
+   ```bash
+   gcloud builds submit \
+     --config cloudbuild.yaml \
+     --substitutions=_CLERK_PUBLISHABLE_KEY="pk_test_your_key" \
+     .
+   ```
+
+   Or set up a Cloud Build trigger connected to your repository.
+
+The deployment will:
+- Build the frontend with Vite
+- Build the backend Python application
+- Combine both into a single container with nginx + supervisord
 - Deploy to Cloud Run with secrets mounted as environment variables
 
 ## MongoDB Collections

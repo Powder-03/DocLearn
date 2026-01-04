@@ -1,0 +1,72 @@
+# ===========================================
+# Stage 1: Build Frontend
+# ===========================================
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+# Copy package files
+COPY frontend/package.json frontend/package-lock.json* ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy frontend source
+COPY frontend/ ./
+
+# Build args for environment variables
+ARG VITE_CLERK_PUBLISHABLE_KEY
+ARG VITE_API_URL=/api/v1
+
+ENV VITE_CLERK_PUBLISHABLE_KEY=$VITE_CLERK_PUBLISHABLE_KEY
+ENV VITE_API_URL=$VITE_API_URL
+
+# Build the frontend
+RUN npm run build
+
+# ===========================================
+# Stage 2: Build Backend Dependencies
+# ===========================================
+FROM python:3.11-slim AS backend-builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN pip install --upgrade pip
+
+# Copy and install requirements
+COPY requirements.txt .
+RUN pip wheel --no-cache-dir --wheel-dir /app/wheels -r requirements.txt
+
+# ===========================================
+# Stage 3: Final Production Image
+# ===========================================
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install nginx
+RUN apt-get update && apt-get install -y nginx supervisor && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy Python wheels from backend builder
+COPY --from=backend-builder /app/wheels /app/wheels
+RUN pip install --no-index --find-links=/app/wheels /app/wheels/*
+
+# Copy backend application
+COPY ./app /app/app
+
+# Copy frontend build
+COPY --from=frontend-builder /frontend/dist /var/www/html
+
+# Copy nginx configuration
+COPY nginx.prod.conf /etc/nginx/nginx.conf
+
+# Copy supervisord configuration
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Expose port (Cloud Run uses 8080)
+EXPOSE 8080
+
+# Start supervisord (manages both nginx and uvicorn)
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

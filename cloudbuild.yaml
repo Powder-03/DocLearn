@@ -1,12 +1,28 @@
+# DocLearn Cloud Build Configuration
+# Builds and deploys both frontend and backend as a single container
+
 steps:
+# Step 1: Build the combined Docker image (frontend + backend)
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/$PROJECT_ID/doclearn:$COMMIT_SHA', '.']
+  args:
+  - 'build'
+  - '-t'
+  - 'gcr.io/$PROJECT_ID/doclearn:$COMMIT_SHA'
+  - '-f'
+  - 'Dockerfile.combined'
+  - '--build-arg'
+  - 'VITE_CLERK_PUBLISHABLE_KEY=${_CLERK_PUBLISHABLE_KEY}'
+  - '--build-arg'
+  - 'VITE_API_URL=/api/v1'
+  - '.'
   id: 'Build'
 
+# Step 2: Push to Container Registry
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'gcr.io/$PROJECT_ID/doclearn:$COMMIT_SHA']
   id: 'Push'
 
+# Step 3: Deploy to Cloud Run
 - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
   entrypoint: gcloud
   args:
@@ -21,18 +37,26 @@ steps:
   - 'managed'
   - '--allow-unauthenticated'
   - '--memory'
-  - '2Gi'  # Increased for LLM operations
+  - '2Gi'
   - '--cpu'
-  - '2'    # Increased for better performance
+  - '2'
   - '--timeout'
   - '300'
+  - '--min-instances'
+  - '0'
+  - '--max-instances'
+  - '10'
   - '--set-env-vars=MONGODB_DB_NAME=doclearn,ENV=production,DEBUG=false'
   - '--update-secrets=MONGODB_URL=doclearn-mongo-url:latest,GOOGLE_API_KEY=doclearn-gemini-key:latest,CLERK_SECRET_KEY=doclearn-clerk-secret:latest,CLERK_JWKS_URL=doclearn-clerk-jwks-url:latest,CLERK_ISSUER=doclearn-clerk-issuer:latest'
   id: 'Deploy'
+
+# Substitution variables (set in Cloud Build trigger or command line)
+substitutions:
+  _CLERK_PUBLISHABLE_KEY: 'pk_test_placeholder'  # Override in trigger
 
 images:
 - 'gcr.io/$PROJECT_ID/doclearn:$COMMIT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: 'E2_HIGHCPU_8'  # Faster builds
+  machineType: 'E2_HIGHCPU_8'
