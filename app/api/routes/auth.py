@@ -160,7 +160,6 @@ async def login(
 
 def _get_verification_html(success: bool, message: str, email: str = None) -> str:
     """Generate HTML response for email verification."""
-    frontend_url = settings.FRONTEND_URL
     
     if success:
         return f"""
@@ -207,37 +206,33 @@ def _get_verification_html(success: bool, message: str, email: str = None) -> st
                 }}
                 h1 {{
                     color: #1F2937;
-                    font-size: 28px;
-                    margin-bottom: 12px;
+                    font-size: 32px;
+                    margin-bottom: 16px;
                 }}
                 p {{
                     color: #6B7280;
                     font-size: 16px;
                     line-height: 1.6;
-                    margin-bottom: 32px;
+                    margin-bottom: 16px;
                 }}
                 .email {{
                     color: #4F46E5;
                     font-weight: 600;
                 }}
-                .button {{
-                    display: inline-block;
-                    background: #4F46E5;
-                    color: white;
-                    text-decoration: none;
-                    padding: 14px 32px;
-                    border-radius: 8px;
-                    font-size: 16px;
+                .success-message {{
+                    color: #10B981;
+                    font-size: 18px;
                     font-weight: 600;
-                    transition: background 0.2s;
+                    margin: 24px 0;
                 }}
-                .button:hover {{
-                    background: #4338CA;
-                }}
-                .footer {{
-                    margin-top: 32px;
-                    font-size: 14px;
-                    color: #9CA3AF;
+                .instruction {{
+                    color: #1F2937;
+                    font-size: 16px;
+                    font-weight: 500;
+                    margin-top: 24px;
+                    padding: 16px;
+                    background: #F3F4F6;
+                    border-radius: 8px;
                 }}
             </style>
         </head>
@@ -251,11 +246,12 @@ def _get_verification_html(success: bool, message: str, email: str = None) -> st
                 <h1>Email Verified! ✅</h1>
                 <p>
                     Your email <span class="email">{email or ''}</span> has been successfully verified.
-                    You now have full access to DocLearn.
                 </p>
-                <a href="{frontend_url}/login" class="button">Go to Login</a>
-                <div class="footer">
-                    <p>You can close this page and return to the app.</p>
+                <div class="success-message">
+                    You now have full access to DocLearn!
+                </div>
+                <div class="instruction">
+                    You can close this tab and return to the DocLearn website to continue.
                 </div>
             </div>
         </body>
@@ -313,25 +309,21 @@ def _get_verification_html(success: bool, message: str, email: str = None) -> st
                     color: #6B7280;
                     font-size: 16px;
                     line-height: 1.6;
-                    margin-bottom: 32px;
+                    margin-bottom: 16px;
                 }}
                 .error {{
                     color: #EF4444;
-                    font-weight: 500;
-                }}
-                .button {{
-                    display: inline-block;
-                    background: #4F46E5;
-                    color: white;
-                    text-decoration: none;
-                    padding: 14px 32px;
-                    border-radius: 8px;
-                    font-size: 16px;
                     font-weight: 600;
-                    transition: background 0.2s;
+                    margin-bottom: 24px;
                 }}
-                .button:hover {{
-                    background: #4338CA;
+                .instruction {{
+                    color: #1F2937;
+                    font-size: 16px;
+                    font-weight: 500;
+                    margin-top: 24px;
+                    padding: 16px;
+                    background: #F3F4F6;
+                    border-radius: 8px;
                 }}
             </style>
         </head>
@@ -344,8 +336,10 @@ def _get_verification_html(success: bool, message: str, email: str = None) -> st
                 </div>
                 <h1>Verification Failed ❌</h1>
                 <p class="error">{message}</p>
-                <p>The verification link may have expired or already been used. Please request a new verification email.</p>
-                <a href="{frontend_url}/login" class="button">Go to Login</a>
+                <p>The verification link may have expired or already been used.</p>
+                <div class="instruction">
+                    Please close this tab and request a new verification email from the DocLearn website.
+                </div>
             </div>
         </body>
         </html>
