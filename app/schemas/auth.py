@@ -43,6 +43,7 @@ class UserResponse(BaseModel):
     user_id: str
     email: str
     name: Optional[str] = None
+    is_verified: bool = False
     created_at: Optional[datetime] = None
 
 
@@ -56,3 +57,89 @@ class AuthResponse(BaseModel):
 class MessageResponse(BaseModel):
     """Simple message response."""
     message: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """Request model for changing password."""
+    current_password: str = Field(..., description="Current password")
+    new_password: str = Field(
+        ..., 
+        min_length=6, 
+        max_length=100, 
+        description="New password (min 6 chars)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "current_password": "oldpassword123",
+                "new_password": "newpassword456"
+            }
+        }
+
+
+class UpdateProfileRequest(BaseModel):
+    """Request model for updating user profile."""
+    name: Optional[str] = Field(None, max_length=100, description="Display name")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Jane Doe"
+            }
+        }
+
+
+class VerifyEmailRequest(BaseModel):
+    """Request model for email verification."""
+    token: str = Field(..., description="Email verification token")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "token": "abc123xyz..."
+            }
+        }
+
+
+class ResendVerificationRequest(BaseModel):
+    """Request model for resending verification email."""
+    email: EmailStr = Field(..., description="User's email address")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "user@example.com"
+            }
+        }
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request model for forgot password."""
+    email: EmailStr = Field(..., description="User's email address")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "email": "user@example.com"
+            }
+        }
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request model for password reset."""
+    token: str = Field(..., description="Password reset token")
+    new_password: str = Field(
+        ..., 
+        min_length=6, 
+        max_length=100, 
+        description="New password (min 6 chars)"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "token": "abc123xyz...",
+                "new_password": "newpassword456"
+            }
+        }

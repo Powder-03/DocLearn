@@ -2,7 +2,6 @@
 API Dependencies.
 
 Provides dependency injection for API routes.
-All services now use MongoDB instead of PostgreSQL.
 """
 from app.services import SessionService, ChatService, PlanService
 from app.services.user_service import user_service, UserService
@@ -10,8 +9,8 @@ from app.core.auth import (
     verify_token,
     get_optional_user,
     get_current_user,
+    require_verified_user,
     AuthUser,
-    ClerkUser,  # Backward compatibility alias
 )
 
 
@@ -47,7 +46,7 @@ __all__ = [
     "get_user_service",
     "get_current_user",
     "get_optional_user",
+    "require_verified_user",
     "verify_token",
     "AuthUser",
-    "ClerkUser",
 ]

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 class CreatePlanRequest(BaseModel):
     """Request model for creating a new learning plan.
     
-    Note: user_id is extracted from the Clerk JWT token, not from the request body.
+    Note: user_id is extracted from the JWT token, not from the request body.
     """
     topic: str = Field(
         ..., 
@@ -64,7 +64,7 @@ class CreatePlanResponse(BaseModel):
 class SessionResponse(BaseModel):
     """Response model for session details."""
     session_id: UUID
-    user_id: str  # Clerk user IDs are strings (e.g., "user_2a123...")
+    user_id: str  # User IDs are UUIDs stored as strings
     topic: str
     total_days: int
     time_per_day: str

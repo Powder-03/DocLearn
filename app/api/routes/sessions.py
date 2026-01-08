@@ -2,8 +2,8 @@
 Session Routes.
 
 API endpoints for managing learning sessions.
-All endpoints now use MongoDB for data storage.
-All endpoints are protected with Clerk authentication.
+All endpoints use MongoDB for data storage.
+All endpoints are protected with JWT authentication.
 """
 import logging
 from typing import Optional
@@ -15,7 +15,7 @@ from app.api.deps import (
     get_session_service, 
     get_plan_service,
     get_current_user,
-    ClerkUser,
+    AuthUser,
 )
 from app.services import SessionService, PlanService
 from app.schemas import (
@@ -36,7 +36,7 @@ router = APIRouter(prefix="/sessions", tags=["Sessions"])
 @router.post("", response_model=CreatePlanResponse, status_code=201)
 async def create_session(
     request: CreatePlanRequest,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
 ):
     """
@@ -52,7 +52,7 @@ async def create_session(
     - `total_days`: Number of days (1-90)
     - `time_per_day`: Daily time commitment (e.g., "1 hour")
     
-    **Note:** User ID is extracted from the Clerk JWT token.
+    **Note:** User ID is extracted from the JWT token.
     """
     try:
         result = await plan_service.create_plan(
@@ -79,7 +79,7 @@ async def create_session(
 
 @router.get("", response_model=SessionListResponse)
 async def list_sessions(
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     mode: Optional[str] = Query(None, description="Filter by mode"),
     status: Optional[str] = Query(None, description="Filter by status"),
     limit: int = Query(20, ge=1, le=100, description="Max results"),
@@ -90,7 +90,7 @@ async def list_sessions(
     List all learning sessions for the authenticated user.
     
     Supports filtering by mode and status, with pagination.
-    User ID is extracted from the Clerk JWT token.
+    User ID is extracted from the JWT token.
     """
     sessions = await session_service.get_user_sessions(
         user_id=current_user.user_id,
@@ -106,7 +106,7 @@ async def list_sessions(
         sessions=[
             SessionResponse(
                 session_id=UUID(s["session_id"]),
-                user_id=str(s["user_id"]),  # Clerk user IDs are strings
+                user_id=str(s["user_id"]),
                 topic=s["topic"],
                 total_days=s["total_days"],
                 time_per_day=s["time_per_day"],
@@ -127,7 +127,7 @@ async def list_sessions(
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(
     session_id: UUID,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """
@@ -145,7 +145,7 @@ async def get_session(
     
     return SessionResponse(
         session_id=UUID(session["session_id"]),
-        user_id=str(session["user_id"]),  # Clerk user IDs are strings
+        user_id=str(session["user_id"]),
         topic=session["topic"],
         total_days=session["total_days"],
         time_per_day=session["time_per_day"],
@@ -162,7 +162,7 @@ async def get_session(
 @router.get("/{session_id}/plan", response_model=LessonPlanResponse)
 async def get_lesson_plan(
     session_id: UUID,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     session_service: SessionService = Depends(get_session_service),
 ):
@@ -199,7 +199,7 @@ async def get_lesson_plan(
 async def get_day_content(
     session_id: UUID,
     day: int,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     plan_service: PlanService = Depends(get_plan_service),
     session_service: SessionService = Depends(get_session_service),
 ):
@@ -226,7 +226,7 @@ async def get_day_content(
 async def update_progress(
     session_id: UUID,
     request: UpdateProgressRequest,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """
@@ -262,7 +262,7 @@ async def update_progress(
 @router.post("/{session_id}/advance-day", response_model=ProgressResponse)
 async def advance_day(
     session_id: UUID,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """
@@ -299,7 +299,7 @@ async def advance_day(
 async def goto_day(
     session_id: UUID,
     day: int,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """
@@ -340,7 +340,7 @@ async def goto_day(
 @router.delete("/{session_id}", status_code=204)
 async def delete_session(
     session_id: UUID,
-    current_user: ClerkUser = Depends(get_current_user),
+    current_user: AuthUser = Depends(get_current_user),
     session_service: SessionService = Depends(get_session_service),
 ):
     """

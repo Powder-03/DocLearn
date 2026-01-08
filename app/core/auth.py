@@ -1,8 +1,7 @@
 """
-Simple JWT Authentication Module.
+JWT Authentication Module.
 
-Provides basic JWT-based authentication for development and testing.
-No external auth providers required.
+Provides JWT-based authentication with email verification support.
 """
 import logging
 import secrets
@@ -29,7 +28,7 @@ security = HTTPBearer(
 # JWT Configuration
 JWT_SECRET = settings.JWT_SECRET or secrets.token_urlsafe(32)
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_HOURS = 24 * 7  # 7 days
+JWT_EXPIRATION_HOURS = settings.JWT_EXPIRATION_HOURS
 
 
 @dataclass
@@ -38,10 +37,7 @@ class AuthUser:
     user_id: str
     email: str
     name: Optional[str] = None
-
-
-# Backward compatibility alias
-ClerkUser = AuthUser
+    is_verified: bool = False
 
 
 def hash_password(password: str) -> str:
@@ -55,7 +51,12 @@ def verify_password(password: str, hashed: str) -> bool:
     return hash_password(password) == hashed
 
 
-def create_access_token(user_id: str, email: str, name: Optional[str] = None) -> str:
+def create_access_token(
+    user_id: str,
+    email: str,
+    name: Optional[str] = None,
+    is_verified: bool = False,
+) -> str:
     """
     Create a JWT access token.
     
@@ -63,6 +64,7 @@ def create_access_token(user_id: str, email: str, name: Optional[str] = None) ->
         user_id: User's unique identifier
         email: User's email
         name: User's display name
+        is_verified: Whether email is verified
         
     Returns:
         JWT token string
@@ -72,6 +74,7 @@ def create_access_token(user_id: str, email: str, name: Optional[str] = None) ->
         "sub": user_id,
         "email": email,
         "name": name,
+        "is_verified": is_verified,
         "exp": expire,
         "iat": datetime.utcnow(),
     }
@@ -130,6 +133,7 @@ async def verify_token(
             user_id=user_id,
             email=email,
             name=payload.get("name"),
+            is_verified=payload.get("is_verified", False),
         )
         
     except HTTPException:
@@ -159,6 +163,22 @@ async def get_optional_user(
         return None
 
 
+async def require_verified_user(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+) -> AuthUser:
+    """
+    Require a verified user - raises 403 if email not verified.
+    """
+    user = await verify_token(credentials)
+    
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Email verification required. Please verify your email to access this resource."
+        )
+    
+    return user
+
+
 # Aliases for cleaner imports
 get_current_user = verify_token
-verify_clerk_token = verify_token  # Backward compatibility

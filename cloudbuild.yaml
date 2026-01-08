@@ -26,8 +26,8 @@ steps:
   - '2'    # Increased for better performance
   - '--timeout'
   - '300'
-  - '--set-env-vars=MONGODB_DB_NAME=doclearn,ENV=production,DEBUG=false'
-  - '--update-secrets=MONGODB_URL=doclearn-mongo-url:latest,GOOGLE_API_KEY=doclearn-gemini-key:latest,JWT_SECRET=doclearn-jwt-secret:latest'
+  - '--set-env-vars=MONGODB_DB_NAME=doclearn,ENV=production,DEBUG=false,SMTP_HOST=smtp.gmail.com,SMTP_PORT=587,EMAIL_FROM_NAME=DocLearn,FRONTEND_URL=https://doclearn-667137057588.us-central1.run.app'
+  - '--update-secrets=MONGODB_URL=doclearn-mongo-url:latest,GOOGLE_API_KEY=doclearn-gemini-key:latest,JWT_SECRET=doclearn-jwt-secret:latest,SMTP_USER=doclearn-smtp-user:latest,SMTP_PASSWORD=doclearn-smtp-password:latest,EMAIL_FROM_ADDRESS=doclearn-smtp-user:latest'
   id: 'Deploy'
 
 images:
