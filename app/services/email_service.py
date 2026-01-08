@@ -151,7 +151,8 @@ class EmailService:
         """
         Send email verification link.
         """
-        verification_url = f"{self.frontend_url}/verify-email?token={verification_token}"
+        # Point directly to backend API - it will redirect to frontend after verification
+        verification_url = f"{self.frontend_url}/api/v1/auth/verify-email?token={verification_token}"
         
         name = user_name or "there"
         

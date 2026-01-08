@@ -5,8 +5,10 @@ API endpoints for user registration, login, email verification,
 password reset, and profile management.
 """
 import logging
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 
+from app.core.config import settings
 from app.services.user_service import user_service, UserService
 from app.services.email_service import email_service, EmailService
 from app.core.auth import (
@@ -23,7 +25,6 @@ from app.schemas.auth import (
     MessageResponse,
     ChangePasswordRequest,
     UpdateProfileRequest,
-    VerifyEmailRequest,
     ResendVerificationRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
@@ -157,51 +158,52 @@ async def login(
 # =============================================================================
 
 
-@router.post("/verify-email", response_model=AuthResponse)
-async def verify_email(
-    request: VerifyEmailRequest,
+@router.get("/verify-email")
+async def verify_email_get(
+    token: str = Query(..., description="Verification token from email"),
     service: UserService = Depends(get_user_service),
     email_svc: EmailService = Depends(get_email_service),
 ):
     """
-    Verify email address with token.
+    Verify email address via GET request (for email link clicks).
     
-    The token is sent to the user's email upon registration.
-    Returns a new access token with verified status.
+    When users click the verification link in their email, the browser
+    makes a GET request. This endpoint handles that and redirects to
+    the frontend with the result.
+    
+    Redirects to:
+    - `{FRONTEND_URL}/verify-email?success=true` on success
+    - `{FRONTEND_URL}/verify-email?error=invalid_token` on failure
     """
-    user = await service.verify_email(request.token)
+    frontend_url = settings.FRONTEND_URL
     
-    if not user:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid or expired verification token"
+    try:
+        user = await service.verify_email(token)
+        
+        if not user:
+            return RedirectResponse(
+                url=f"{frontend_url}/verify-email?error=invalid_token",
+                status_code=302,
+            )
+        
+        # Send welcome email
+        await email_svc.send_welcome_email(
+            to_email=user["email"],
+            user_name=user.get("name"),
         )
-    
-    # Send welcome email
-    await email_svc.send_welcome_email(
-        to_email=user["email"],
-        user_name=user.get("name"),
-    )
-    
-    # Create new token with verified status
-    token = create_access_token(
-        user_id=user["user_id"],
-        email=user["email"],
-        name=user.get("name"),
-        is_verified=True,
-    )
-    
-    return AuthResponse(
-        access_token=token,
-        token_type="bearer",
-        user=UserResponse(
-            user_id=user["user_id"],
-            email=user["email"],
-            name=user.get("name"),
-            is_verified=True,
-            created_at=user.get("created_at"),
-        ),
-    )
+        
+        # Redirect to frontend with success
+        return RedirectResponse(
+            url=f"{frontend_url}/verify-email?success=true&email={user['email']}",
+            status_code=302,
+        )
+        
+    except Exception as e:
+        logger.exception(f"Email verification error: {str(e)}")
+        return RedirectResponse(
+            url=f"{frontend_url}/verify-email?error=server_error",
+            status_code=302,
+        )
 
 
 @router.post("/resend-verification", response_model=MessageResponse)
