@@ -118,15 +118,23 @@ This service provides:
     )
     
     # Add CORS middleware - allow specific origins with credentials
+    allowed_origins = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ]
+    
+    if settings.FRONTEND_URL:
+        allowed_origins.append(settings.FRONTEND_URL)
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",
-            "http://localhost:5174",
-        ],
-        allow_credentials=True,
+        allow_origins=allowed_origins,  # Specific origins, NOT ["*"]
+        allow_credentials=True,          # Required for cookies
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Set-Cookie"],   # Allow frontend to see Set-Cookie
     )
     
     # Include routers
