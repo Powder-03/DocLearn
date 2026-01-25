@@ -42,26 +42,26 @@ export function ChatPage() {
   const streamingContentRef = useRef('');
   const hasStartedLesson = useRef(false);
 
-  // Load session and chat history
+  // Load session and chat history for current day
   useEffect(() => {
     const loadData = async () => {
       if (!sessionId) return;
       
       try {
-        const [sessionData, historyData] = await Promise.all([
-          sessionService.get(sessionId),
-          chatService.getHistory(sessionId),
-        ]);
-        
+        const sessionData = await sessionService.get(sessionId);
         setSession(sessionData);
-        setMessages(historyData.messages);
-        setCurrentDay(sessionData.current_day);
         
-        // Only start lesson if no messages exist and we haven't started yet
+        const dayToUse = initialDay ? parseInt(initialDay) : sessionData.current_day;
+        setCurrentDay(dayToUse);
+        
+        // Load history for current day only
+        const historyData = await chatService.getHistory(sessionId, 100, dayToUse);
+        setMessages(historyData.messages);
+        
+        // Only start lesson if no messages exist for this day and we haven't started yet
         if (historyData.messages.length === 0 && !hasStartedLesson.current) {
           hasStartedLesson.current = true;
-          const dayToStart = initialDay ? parseInt(initialDay) : sessionData.current_day;
-          await startDay(dayToStart);
+          await startDay(dayToUse);
         }
       } catch (error) {
         console.error('Failed to load chat:', error);
@@ -221,10 +221,21 @@ export function ChatPage() {
     try {
       // Update backend to track current day
       await sessionService.gotoDay(sessionId, day);
-      // Update local state
+      
+      // Clear current messages for fresh start
+      setMessages([]);
       setCurrentDay(day);
-      // Start the lesson for the new day (this will add welcome message)
-      await startDay(day);
+      
+      // Load chat history for the selected day
+      const historyData = await chatService.getHistory(sessionId, 100, day);
+      
+      if (historyData.messages.length > 0) {
+        // Day has existing messages, show them
+        setMessages(historyData.messages);
+      } else {
+        // No messages for this day, start the lesson
+        await startDay(day);
+      }
     } catch (error) {
       console.error('Failed to switch day:', error);
     }

@@ -258,12 +258,17 @@ async def start_lesson(
 async def get_chat_history(
     session_id: UUID,
     limit: int = 100,
+    day: int = None,
     current_user: AuthUser = Depends(require_verified_user),
     chat_service: ChatService = Depends(get_chat_service),
     session_service: SessionService = Depends(get_session_service),
 ):
     """
     Get chat history for a session from MongoDB.
+    
+    Query Parameters:
+    - limit: Maximum messages to return (default 100)
+    - day: Optional day number to filter messages by
     
     Returns summaries (compressed history) and recent messages in buffer.
     """
@@ -272,7 +277,7 @@ async def get_chat_history(
         session = await _verify_session_ownership(session_id, current_user.user_id, session_service)
         
         # Fetch from MongoDB
-        history_data = await chat_service.get_chat_history(session_id, limit)
+        history_data = await chat_service.get_chat_history(session_id, limit, day=day)
         
         return ChatHistoryResponse(
             session_id=session_id,

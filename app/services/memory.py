@@ -59,26 +59,28 @@ class MemoryService:
             )
         return self._summarizer_llm
     
-    async def add_user_message(self, session_id: str, content: str) -> None:
+    async def add_user_message(self, session_id: str, content: str, day: int = 1) -> None:
         """
         Add a user message to the conversation.
         
         Args:
             session_id: The session identifier
             content: The user's message
+            day: The day number this message belongs to
         """
-        await self.storage.add_message(session_id, "user", content)
+        await self.storage.add_message(session_id, "user", content, day=day)
         logger.debug(f"Added user message for session {session_id}")
     
-    async def add_assistant_message(self, session_id: str, content: str) -> None:
+    async def add_assistant_message(self, session_id: str, content: str, day: int = 1) -> None:
         """
         Add an assistant message and check if summarization is needed.
         
         Args:
             session_id: The session identifier
             content: The assistant's response
+            day: The day number this message belongs to
         """
-        doc = await self.storage.add_message(session_id, "assistant", content)
+        doc = await self.storage.add_message(session_id, "assistant", content, day=day)
         
         # Check if we need to summarize
         buffer_count = doc.get("buffer_count", 0)

@@ -112,8 +112,12 @@ export const chatService = {
     });
   },
 
-  // Get chat history
-  getHistory: (sessionId: string, limit: number = 100): Promise<ChatHistoryResponse> => {
-    return apiRequest<ChatHistoryResponse>(`/chat/${sessionId}/history?limit=${limit}`);
+  // Get chat history (optionally filtered by day)
+  getHistory: (sessionId: string, limit: number = 100, day?: number): Promise<ChatHistoryResponse> => {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (day !== undefined) {
+      params.append('day', day.toString());
+    }
+    return apiRequest<ChatHistoryResponse>(`/chat/${sessionId}/history?${params}`);
   },
 };

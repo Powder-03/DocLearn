@@ -111,7 +111,8 @@ class ChatStorageService:
         self, 
         session_id: str, 
         role: str, 
-        content: str
+        content: str,
+        day: int = 1
     ) -> Dict[str, Any]:
         """
         Add a message to the chat buffer.
@@ -120,6 +121,7 @@ class ChatStorageService:
             session_id: The session identifier
             role: 'user' or 'assistant'
             content: The message content
+            day: The day number this message belongs to
             
         Returns:
             Updated chat document
@@ -127,7 +129,8 @@ class ChatStorageService:
         message = {
             "role": role,
             "content": content,
-            "timestamp": datetime.utcnow()
+            "timestamp": datetime.utcnow(),
+            "day": day
         }
         
         result = await self.collection.find_one_and_update(
@@ -172,6 +175,18 @@ class ChatStorageService:
             {"messages": 1}
         )
         return doc.get("messages", []) if doc else []
+    
+    async def get_messages_by_day(self, session_id: str, day: int) -> List[Dict[str, Any]]:
+        """Get messages for a specific day."""
+        doc = await self.collection.find_one(
+            {"session_id": session_id},
+            {"messages": 1}
+        )
+        if not doc:
+            return []
+        
+        messages = doc.get("messages", [])
+        return [msg for msg in messages if msg.get("day") == day]
     
     async def get_summaries(self, session_id: str) -> List[str]:
         """Get all conversation summaries for a session."""

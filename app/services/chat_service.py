@@ -106,8 +106,8 @@ class ChatService:
         # Store messages in MongoDB (handles buffer + summarization)
         ai_response = result.get("ai_response", "")
         if ai_response:
-            await self.memory.add_user_message(str(session_id), message)
-            await self.memory.add_assistant_message(str(session_id), ai_response)
+            await self.memory.add_user_message(str(session_id), message, day=current_day)
+            await self.memory.add_assistant_message(str(session_id), ai_response, day=current_day)
         
         # Use LLM-based sentiment analysis to determine topic advancement
         should_advance = await self._should_advance_topic(message, ai_response, current_topic)
@@ -179,10 +179,11 @@ class ChatService:
         state = await self._build_state_from_session(session, user_message=None)
         result = await invoke_generation_graph(state)
         
-        # Store the welcome message in MongoDB
+        # Store the welcome message in MongoDB with day number
+        current_day = session["current_day"]
         if result.get("ai_response"):
-            await self.memory.add_user_message(str(session_id), "[Started lesson]")
-            await self.memory.add_assistant_message(str(session_id), result["ai_response"])
+            await self.memory.add_user_message(str(session_id), "[Started lesson]", day=current_day)
+            await self.memory.add_assistant_message(str(session_id), result["ai_response"], day=current_day)
         
         return {
             "current_day": session["current_day"],
@@ -195,6 +196,7 @@ class ChatService:
         self,
         session_id: UUID,
         limit: int = 100,
+        day: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Get chat history for a session from MongoDB.
@@ -202,6 +204,7 @@ class ChatService:
         Args:
             session_id: Session identifier
             limit: Maximum recent messages to return
+            day: Optional day number to filter messages by
             
         Returns:
             Dictionary with summaries and recent messages
@@ -213,6 +216,16 @@ class ChatService:
         if not session:
             raise ValueError(f"Session {session_id} not found")
         
+        # If day is specified, get messages for that day only
+        if day is not None:
+            messages = await self.memory.storage.get_messages_by_day(str(session_id), day)
+            return {
+                "summaries": [],
+                "recent_messages": messages[-limit:],
+                "total_summaries": 0,
+            }
+        
+        # Otherwise get full context
         context = await self.memory.storage.get_full_context(str(session_id))
         
         return {
@@ -304,8 +317,8 @@ class ChatService:
                     yield (chunk.content, {})
             
             # Store messages in MongoDB (handles buffer + summarization)
-            await self.memory.add_user_message(str(session_id), message)
-            await self.memory.add_assistant_message(str(session_id), full_response)
+            await self.memory.add_user_message(str(session_id), message, day=current_day)
+            await self.memory.add_assistant_message(str(session_id), full_response, day=current_day)
             
             # Use LLM-based sentiment analysis to determine topic advancement
             should_advance = await self._should_advance_topic(message, full_response, current_topic)
