@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Check, Circle, Play, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Circle, Play } from 'lucide-react';
 import { Button, Card, Badge, ProgressBar, Spinner } from '../components/ui';
 import { sessionService } from '../services';
 import type { Session } from '../types';
