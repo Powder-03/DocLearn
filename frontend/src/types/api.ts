@@ -141,7 +141,7 @@ export interface UpdateProgressRequest {
 
 // Chat types
 export interface ChatMessage {
-  role: 'human' | 'assistant';
+  role: 'human' | 'user' | 'assistant';
   content: string;
   timestamp?: string;
 }

@@ -126,6 +126,11 @@ class ChatService:
         
         is_course_complete = is_day_complete and current_day >= session["total_days"]
         
+        # Update session status to COMPLETED if course is done
+        if is_course_complete:
+            await self.session_service.set_status(session_id, SessionStatus.COMPLETED.value)
+            logger.info(f"Session {session_id} marked as COMPLETED")
+        
         return {
             "response": ai_response,
             "current_day": current_day,
@@ -353,6 +358,11 @@ class ChatService:
                     logger.info(f"Day {current_day} completed")
             
             is_course_complete = is_day_complete and current_day >= session["total_days"]
+            
+            # Update session status to COMPLETED if course is done
+            if is_course_complete:
+                await self.session_service.set_status(session_id, SessionStatus.COMPLETED.value)
+                logger.info(f"Session {session_id} marked as COMPLETED")
             
             # Yield final metadata
             yield ("", {

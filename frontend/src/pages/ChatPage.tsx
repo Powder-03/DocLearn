@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Send, 
-  Circle, 
+import {
+  ArrowLeft,
+  Send,
+  Circle,
   Info,
   X,
   FileText,
@@ -32,14 +32,14 @@ export function ChatPage() {
   const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 1024);
   const [showLeftSidebar, setShowLeftSidebar] = useState(false);
   const [dayContent, setDayContent] = useState<DayPlan | null>(null);
-  
+
   // Day completion modal state
   const [showDayCompleteModal, setShowDayCompleteModal] = useState(false);
   const [completedDay, setCompletedDay] = useState(0);
   const [isDownloadingDPP, setIsDownloadingDPP] = useState(false);
   const [isDownloadingNotes, setIsDownloadingNotes] = useState(false);
   const [downloadError, setDownloadError] = useState('');
-  
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const streamingContentRef = useRef('');
@@ -49,18 +49,18 @@ export function ChatPage() {
   useEffect(() => {
     const loadData = async () => {
       if (!sessionId) return;
-      
+
       try {
         const sessionData = await sessionService.get(sessionId);
         setSession(sessionData);
-        
+
         const dayToUse = initialDay ? parseInt(initialDay) : sessionData.current_day;
         setCurrentDay(dayToUse);
-        
+
         // Load history for current day only
         const historyData = await chatService.getHistory(sessionId, 100, dayToUse);
         setMessages(historyData.messages);
-        
+
         // Only start lesson if no messages exist for this day and we haven't started yet
         if (historyData.messages.length === 0 && !hasStartedLesson.current) {
           hasStartedLesson.current = true;
@@ -80,7 +80,7 @@ export function ChatPage() {
   useEffect(() => {
     const loadDayContent = async () => {
       if (!sessionId || !session) return;
-      
+
       try {
         const content = await sessionService.getDayContent(sessionId, currentDay);
         setDayContent(content);
@@ -101,19 +101,19 @@ export function ChatPage() {
 
   const startDay = async (day: number) => {
     if (!sessionId) return;
-    
+
     try {
       const response = await chatService.startLesson({ session_id: sessionId, day });
-      
+
       setCurrentDay(response.current_day);
-      
+
       // Add welcome message
       const welcomeMessage: ChatMessage = {
         role: 'assistant',
         content: response.welcome_message,
         timestamp: new Date().toISOString(),
       };
-      
+
       setMessages(prev => [...prev, welcomeMessage]);
     } catch (error) {
       console.error('Failed to start lesson:', error);
@@ -122,13 +122,13 @@ export function ChatPage() {
 
   const handleSend = async () => {
     if (!input.trim() || !sessionId || isSending) return;
-    
+
     const userMessage: ChatMessage = {
       role: 'human',
       content: input.trim(),
       timestamp: new Date().toISOString(),
     };
-    
+
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setIsSending(true);
@@ -146,21 +146,21 @@ export function ChatPage() {
         // onDone
         (data: SSEDoneEvent) => {
           const fullResponse = streamingContentRef.current || data.full_response || '';
-          
+
           if (fullResponse) {
             const assistantMessage: ChatMessage = {
               role: 'assistant',
               content: fullResponse,
               timestamp: new Date().toISOString(),
             };
-            
+
             setMessages(prev => [...prev, assistantMessage]);
           }
-          
+
           setStreamingContent('');
           streamingContentRef.current = '';
           setIsSending(false);
-          
+
           // Show day completion modal if day is complete
           if (data.is_day_complete) {
             setCompletedDay(currentDay);
@@ -186,7 +186,7 @@ export function ChatPage() {
     if (!sessionId) return;
     setIsDownloadingDPP(true);
     setDownloadError('');
-    
+
     try {
       await pdfService.downloadDPP(sessionId, completedDay);
     } catch (err) {
@@ -201,7 +201,7 @@ export function ChatPage() {
     if (!sessionId) return;
     setIsDownloadingNotes(true);
     setDownloadError('');
-    
+
     try {
       await pdfService.downloadNotes(sessionId, completedDay);
     } catch (err) {
@@ -220,18 +220,18 @@ export function ChatPage() {
 
   const handleDayClick = async (day: number) => {
     if (!sessionId || day > (session?.total_days || 0) || day === currentDay) return;
-    
+
     try {
       // Update backend to track current day
       await sessionService.gotoDay(sessionId, day);
-      
+
       // Clear current messages for fresh start
       setMessages([]);
       setCurrentDay(day);
-      
+
       // Load chat history for the selected day
       const historyData = await chatService.getHistory(sessionId, 100, day);
-      
+
       if (historyData.messages.length > 0) {
         // Day has existing messages, show them
         setMessages(historyData.messages);
@@ -276,7 +276,7 @@ export function ChatPage() {
     <div className="h-screen bg-dark flex">
       {/* Mobile Left Sidebar Overlay */}
       {showLeftSidebar && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 lg:hidden"
           onClick={() => setShowLeftSidebar(false)}
         />
@@ -295,16 +295,16 @@ export function ChatPage() {
           <Link to="/" className="text-lg font-bold text-white">
             DocLearn
           </Link>
-          <button 
+          <button
             onClick={() => setShowLeftSidebar(false)}
             className="lg:hidden p-1 text-gray-400 hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
-        
+
         <div className="p-4 border-b border-dark-border">
-          <Link 
+          <Link
             to={session.mode === 'quick' ? '/sessions' : `/sessions/${sessionId}`}
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-white"
           >
@@ -348,7 +348,7 @@ export function ChatPage() {
             <div className="space-y-1">
               {Array.from({ length: session.total_days }, (_, i) => i + 1).map((day) => {
                 const isCurrent = day === currentDay;
-                
+
                 return (
                   <button
                     key={day}
@@ -356,11 +356,10 @@ export function ChatPage() {
                       handleDayClick(day);
                       setShowLeftSidebar(false);
                     }}
-                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isCurrent
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${isCurrent
                         ? 'bg-primary/20 text-white'
                         : 'text-gray-400 hover:bg-dark-hover hover:text-white'
-                    }`}
+                      }`}
                   >
                     {isCurrent ? (
                       <div className="w-4 h-4 rounded-full bg-primary" />
@@ -394,7 +393,7 @@ export function ChatPage() {
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="text-white font-medium truncate flex-1">
-            {session.mode === 'quick' 
+            {session.mode === 'quick'
               ? `⚡ ${session.topic}`
               : `Day ${currentDay}: ${dayContent?.title || session.lesson_plan?.days?.[currentDay - 1]?.title || 'Loading...'}`
             }
@@ -409,32 +408,35 @@ export function ChatPage() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
-          {messages.map((msg, i) => (
-            <div
-              key={i}
-              className={`flex ${msg.role === 'human' ? 'justify-end' : 'justify-start'}`}
-            >
-              <div className={`max-w-[85%] sm:max-w-[70%] ${msg.role === 'human' ? '' : ''}`}>
-                {msg.role === 'assistant' && (
-                  <p className="text-xs text-gray-500 mb-1">AI Tutor</p>
-                )}
-                <div
-                  className={`rounded-2xl px-4 py-3 ${
-                    msg.role === 'human'
-                      ? 'bg-gradient-to-r from-primary to-purple-600 text-white rounded-br-md'
-                      : 'bg-dark-card text-white rounded-bl-md'
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
+          {messages.map((msg, i) => {
+            const isUser = msg.role === 'human' || msg.role === 'user';
+            return (
+              <div
+                key={i}
+                className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+              >
+                <div className={`max-w-[85%] sm:max-w-[70%]`}>
+                  {!isUser && (
+                    <p className="text-xs text-gray-500 mb-1">AI Tutor</p>
+                  )}
+                  <div
+                    className={`rounded-2xl px-4 py-3 ${isUser
+                        ? 'bg-gradient-to-r from-primary to-purple-600 text-white rounded-br-md'
+                        : 'bg-dark-card text-white rounded-bl-md'
+                      }`}
+                  >
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                  {msg.timestamp && (
+                    <p className={`text-xs text-gray-500 mt-1 ${isUser ? 'text-right' : ''}`}>
+                      {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  )}
                 </div>
-                {msg.timestamp && (
-                  <p className={`text-xs text-gray-500 mt-1 ${msg.role === 'human' ? 'text-right' : ''}`}>
-                    {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
+
 
           {/* Streaming message */}
           {(isSending || streamingContent) && (
@@ -501,86 +503,86 @@ export function ChatPage() {
       {/* Right Sidebar - Lesson Info */}
       {showSidebar && (
         <>
-        {/* Mobile overlay backdrop */}
-        <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setShowSidebar(false)}
-        />
-        <aside className="fixed right-0 top-0 h-full z-50 lg:relative lg:z-auto w-72 bg-dark-card border-l border-dark-border flex flex-col shrink-0">
-          <div className="p-4 border-b border-dark-border flex items-center justify-between">
-            <h2 className="font-medium text-white">{session.mode === 'quick' ? 'Session Info' : "Today's Lesson"}</h2>
-            <button
-              onClick={() => setShowSidebar(false)}
-              className="p-1 text-gray-400 hover:text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          {/* Mobile overlay backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+            onClick={() => setShowSidebar(false)}
+          />
+          <aside className="fixed right-0 top-0 h-full z-50 lg:relative lg:z-auto w-72 bg-dark-card border-l border-dark-border flex flex-col shrink-0">
+            <div className="p-4 border-b border-dark-border flex items-center justify-between">
+              <h2 className="font-medium text-white">{session.mode === 'quick' ? 'Session Info' : "Today's Lesson"}</h2>
+              <button
+                onClick={() => setShowSidebar(false)}
+                className="p-1 text-gray-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-          <div className="p-4 space-y-4 overflow-y-auto flex-1">
-            {dayContent && (
-              <>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2">Topics</h3>
-                  <div className="space-y-2">
-                    {dayContent.topics?.map((topic, i) => (
-                      <div key={i} className="flex items-center gap-2 text-sm">
-                        <Circle className="w-3 h-3 text-primary" />
-                        <span className="text-white">{topic.name}</span>
-                      </div>
-                    ))}
+            <div className="p-4 space-y-4 overflow-y-auto flex-1">
+              {dayContent && (
+                <>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">Topics</h3>
+                    <div className="space-y-2">
+                      {dayContent.topics?.map((topic, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm">
+                          <Circle className="w-3 h-3 text-primary" />
+                          <span className="text-white">{topic.name}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="h-px bg-dark-border" />
+                  <div className="h-px bg-dark-border" />
 
-                <div>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2">Key Concepts</h3>
-                  <div className="flex flex-wrap gap-1">
-                    {dayContent.topics?.flatMap(t => t.key_concepts || []).map((concept, i) => (
-                      <span key={i} className="px-2 py-1 bg-dark-border rounded text-xs text-gray-400">
-                        {concept}
-                      </span>
-                    ))}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">Key Concepts</h3>
+                    <div className="flex flex-wrap gap-1">
+                      {dayContent.topics?.flatMap(t => t.key_concepts || []).map((concept, i) => (
+                        <span key={i} className="px-2 py-1 bg-dark-border rounded text-xs text-gray-400">
+                          {concept}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="h-px bg-dark-border" />
+                  <div className="h-px bg-dark-border" />
 
-                <div>
-                  <h3 className="text-sm font-medium text-gray-400 mb-2">Objectives</h3>
-                  <ul className="space-y-1">
-                    {dayContent.objectives?.map((obj, i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
-                        <span className="text-primary mt-1">•</span>
-                        {obj}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </>
-            )}
-          </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-400 mb-2">Objectives</h3>
+                    <ul className="space-y-1">
+                      {dayContent.objectives?.map((obj, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-gray-400">
+                          <span className="text-primary mt-1">•</span>
+                          {obj}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
 
-          <div className="p-4 border-t border-dark-border">
-            {session.mode === 'quick' ? (
-              <>
-                <p className="text-sm text-yellow-400 mb-1">⚡ Quick Session</p>
-                {session.target && <p className="text-xs text-gray-500">🎯 {session.target}</p>}
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-gray-400 mb-1">Progress</p>
-                <p className="text-white">
-                  Day {currentDay} of {session.total_days}
-                </p>
-                {session.target && (
-                  <p className="text-xs text-gray-500 mt-1">🎯 {session.target}</p>
-                )}
-              </>
-            )}
-          </div>
-        </aside>
+            <div className="p-4 border-t border-dark-border">
+              {session.mode === 'quick' ? (
+                <>
+                  <p className="text-sm text-yellow-400 mb-1">⚡ Quick Session</p>
+                  {session.target && <p className="text-xs text-gray-500">🎯 {session.target}</p>}
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-400 mb-1">Progress</p>
+                  <p className="text-white">
+                    Day {currentDay} of {session.total_days}
+                  </p>
+                  {session.target && (
+                    <p className="text-xs text-gray-500 mt-1">🎯 {session.target}</p>
+                  )}
+                </>
+              )}
+            </div>
+          </aside>
         </>
       )}
 
@@ -594,11 +596,11 @@ export function ChatPage() {
           <div className="w-16 h-16 mx-auto mb-4 bg-success/20 rounded-full flex items-center justify-center">
             <CheckCircle className="w-10 h-10 text-success" />
           </div>
-          
+
           <h2 className="text-2xl font-bold text-white mb-2">
             🎉 Day {completedDay} Complete!
           </h2>
-          
+
           <p className="text-gray-400 mb-6">
             Great job! You've completed all topics for today.
             Would you like to download study materials?
