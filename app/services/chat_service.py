@@ -22,8 +22,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.services.session_service import SessionService, SessionStatus
 from app.services.memory import memory_service, MemoryService
 from app.graphs import invoke_generation_graph, create_initial_state
-from app.core.llm_factory import get_tutor_llm
-from app.core.prompts import TUTOR_SYSTEM_PROMPT, TUTOR_FIRST_MESSAGE_PROMPT, QUICK_TUTOR_SYSTEM_PROMPT
+from app.core.llm_factory import get_tutor_llm, get_dsa_llm, get_dsa_heavy_llm
+from app.core.prompts import TUTOR_SYSTEM_PROMPT, TUTOR_FIRST_MESSAGE_PROMPT, QUICK_TUTOR_SYSTEM_PROMPT, DSA_TUTOR_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +302,24 @@ class ChatService:
                 current_topic=json.dumps(current_topic, indent=2) if current_topic else "Wrapping up the session",
                 memory_summary=memory_context.get("memory_summary") or "This is the start of the conversation.",
             )
+        elif session_mode in ("dsa_leetcode", "dsa_other"):
+            # DSA mode: use DSA-specific prompt with problem details
+            leetcode_data = session.get("leetcode_data") or {}
+            problem_title = session.get("topic", "DSA Problem")
+            difficulty = leetcode_data.get("difficulty", "Unknown")
+            programming_language = session.get("programming_language", "python")
+            problem_description = leetcode_data.get("description", session.get("question_text", ""))
+            topic_tags = ", ".join(leetcode_data.get("topic_tags", []))
+            
+            system_prompt = DSA_TUTOR_SYSTEM_PROMPT.format(
+                problem_title=problem_title,
+                difficulty=difficulty,
+                programming_language=programming_language,
+                problem_description=problem_description[:1500] if problem_description else "See conversation context.",
+                topic_tags=topic_tags or "DSA",
+                current_topic=json.dumps(current_topic, indent=2) if current_topic else "Wrapping up the session",
+                memory_summary=memory_context.get("memory_summary") or "This is the start of the conversation.",
+            )
         else:
             system_prompt = TUTOR_SYSTEM_PROMPT.format(
                 topic=session["topic"],
@@ -324,8 +342,13 @@ class ChatService:
         # Add current user message
         messages.append(HumanMessage(content=message))
         
-        # Get streaming LLM
-        llm = get_tutor_llm(temperature=0.7, streaming=True)
+        # Get streaming LLM (select based on mode)
+        if session_mode == "dsa_leetcode":
+            llm = get_dsa_llm(temperature=0.5, streaming=True)
+        elif session_mode == "dsa_other":
+            llm = get_dsa_heavy_llm(temperature=0.5, streaming=True)
+        else:
+            llm = get_tutor_llm(temperature=0.7, streaming=True)
         
         # Collect full response while streaming
         full_response = ""

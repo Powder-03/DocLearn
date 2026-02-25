@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, FileText, Video, Youtube, RefreshCw, ClipboardList, Zap } from 'lucide-react';
+import { ArrowLeft, Sparkles, FileText, Video, Youtube, RefreshCw, ClipboardList, Zap, Code } from 'lucide-react';
 import { Card, Button, Input, Badge } from '../components/ui';
 import { sessionService } from '../services';
 import { useAuth } from '../context';
 
-type Step = 'mode' | 'form' | 'quick-form';
+type Step = 'mode' | 'form' | 'quick-form' | 'dsa-form';
 
 export function CreateSessionPage() {
   const navigate = useNavigate();
   const { user, refreshUser } = useAuth();
   const [step, setStep] = useState<Step>('mode');
   const [selectedMode, setSelectedMode] = useState<string | null>('ai-tutor');
-  
+
   // AI Tutor form state
   const [topic, setTopic] = useState('');
   const [goal, setGoal] = useState('');
@@ -27,6 +27,12 @@ export function CreateSessionPage() {
   const [quickTopic, setQuickTopic] = useState('');
   const [quickTarget, setQuickTarget] = useState('');
   const [quickTime, setQuickTime] = useState('1 hour');
+
+  // DSA Mode form state
+  const [dsaSubMode, setDsaSubMode] = useState<'leetcode' | 'other'>('leetcode');
+  const [questionNumber, setQuestionNumber] = useState('');
+  const [questionText, setQuestionText] = useState('');
+  const [programmingLanguage, setProgrammingLanguage] = useState('python');
 
   const modes = [
     {
@@ -68,6 +74,14 @@ export function CreateSessionPage() {
       description: 'Learn from any YouTube video',
       available: false,
       accent: 'primary',
+    },
+    {
+      id: 'dsa-mode',
+      icon: Code,
+      title: 'DSA Practice',
+      description: 'Solve LeetCode problems or custom DSA questions with AI guidance',
+      available: true,
+      accent: 'green',
     },
   ];
 
@@ -137,6 +151,33 @@ export function CreateSessionPage() {
     }
   };
 
+  const handleDsaCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsCreating(true);
+
+    try {
+      const mode = dsaSubMode === 'leetcode' ? 'dsa_leetcode' : 'dsa_other';
+      const topic = dsaSubMode === 'leetcode'
+        ? `LeetCode #${questionNumber}`
+        : 'Custom DSA Problem';
+
+      const response = await sessionService.create({
+        topic,
+        total_days: 1,
+        time_per_day: '1 hour',
+        mode,
+        question_number: dsaSubMode === 'leetcode' ? parseInt(questionNumber) : undefined,
+        programming_language: programmingLanguage,
+        question_text: dsaSubMode === 'other' ? questionText : undefined,
+      });
+      // Go directly to chat for DSA mode
+      navigate(`/chat/${response.session_id}`);
+    } catch (err) {
+      handleError(err);
+    }
+  };
+
   // Error / verification banner component
   const ErrorBanner = () => (
     <>
@@ -183,31 +224,28 @@ export function CreateSessionPage() {
           {modes.map((mode) => (
             <Card
               key={mode.id}
-              className={`cursor-pointer transition-all ${
-                !mode.available ? 'opacity-50 cursor-not-allowed' : ''
-              } ${selectedMode === mode.id ? 'border-primary ring-1 ring-primary' : ''}`}
+              className={`cursor-pointer transition-all ${!mode.available ? 'opacity-50 cursor-not-allowed' : ''
+                } ${selectedMode === mode.id ? 'border-primary ring-1 ring-primary' : ''}`}
               padding="md"
               onClick={() => mode.available && setSelectedMode(mode.id)}
             >
               <div className="flex items-center gap-4">
-                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                  selectedMode === mode.id 
-                    ? 'border-primary bg-primary' 
-                    : mode.available
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedMode === mode.id
+                  ? 'border-primary bg-primary'
+                  : mode.available
                     ? 'border-gray-500'
                     : 'border-gray-700'
-                }`}>
+                  }`}>
                   {selectedMode === mode.id && (
                     <div className="w-2 h-2 bg-white rounded-full" />
                   )}
                 </div>
-                
+
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <mode.icon className={`w-4 h-4 ${
-                      mode.id === 'quick-mode' ? 'text-yellow-400' : 
+                    <mode.icon className={`w-4 h-4 ${mode.id === 'quick-mode' ? 'text-yellow-400' :
                       mode.available ? 'text-primary' : 'text-gray-500'
-                    }`} />
+                      }`} />
                     <h3 className="font-medium text-white">{mode.title}</h3>
                     {!mode.available && (
                       <Badge variant="gray" size="sm">COMING SOON</Badge>
@@ -234,6 +272,8 @@ export function CreateSessionPage() {
             onClick={() => {
               if (selectedMode === 'quick-mode') {
                 setStep('quick-form');
+              } else if (selectedMode === 'dsa-mode') {
+                setStep('dsa-form');
               } else {
                 setStep('form');
               }
@@ -295,11 +335,10 @@ export function CreateSessionPage() {
                       key={time}
                       type="button"
                       onClick={() => setQuickTime(time)}
-                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                        quickTime === time
-                          ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                          : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
-                      }`}
+                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${quickTime === time
+                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                        : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
+                        }`}
                     >
                       {time}
                     </button>
@@ -334,6 +373,147 @@ export function CreateSessionPage() {
             <Button type="submit" isLoading={isCreating}>
               <Zap className="w-4 h-4 mr-2" />
               Start Learning
+            </Button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // ============ DSA MODE FORM ============
+  if (step === 'dsa-form') {
+    const languages = [
+      { value: 'python', label: 'Python' },
+      { value: 'java', label: 'Java' },
+      { value: 'cpp', label: 'C++' },
+      { value: 'javascript', label: 'JavaScript' },
+      { value: 'typescript', label: 'TypeScript' },
+      { value: 'go', label: 'Go' },
+      { value: 'rust', label: 'Rust' },
+      { value: 'csharp', label: 'C#' },
+    ];
+
+    return (
+      <div className="max-w-lg mx-auto">
+        <div className="text-sm text-gray-400 mb-6">
+          <Link to="/sessions" className="hover:text-white">Sessions</Link>
+          <span className="mx-2">&gt;</span>
+          <button onClick={() => setStep('mode')} className="hover:text-white">Create</button>
+          <span className="mx-2">&gt;</span>
+          <span className="text-emerald-400">DSA Practice</span>
+        </div>
+
+        <h1 className="text-2xl font-bold text-white mb-2">🧩 DSA Practice Session</h1>
+        <p className="text-gray-400 mb-8">Solve problems with Socratic AI guidance</p>
+
+        <ErrorBanner />
+
+        <form onSubmit={handleDsaCreate}>
+          <Card padding="lg" className="mb-6">
+            <div className="space-y-6">
+              {/* Sub-mode toggle */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-3">Problem Source</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDsaSubMode('leetcode')}
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${dsaSubMode === 'leetcode'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
+                      }`}
+                  >
+                    <Code className="w-4 h-4 inline mr-2" />
+                    LeetCode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDsaSubMode('other')}
+                    className={`flex-1 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${dsaSubMode === 'other'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
+                      }`}
+                  >
+                    <FileText className="w-4 h-4 inline mr-2" />
+                    Custom Problem
+                  </button>
+                </div>
+              </div>
+
+              {/* LeetCode mode: question number */}
+              {dsaSubMode === 'leetcode' && (
+                <Input
+                  label="LeetCode Question Number"
+                  placeholder="e.g., 1 (Two Sum), 121 (Best Time to Buy and Sell Stock)..."
+                  value={questionNumber}
+                  onChange={(e) => setQuestionNumber(e.target.value)}
+                  type="number"
+                  required
+                />
+              )}
+
+              {/* Other mode: full question */}
+              {dsaSubMode === 'other' && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-2">Problem Statement</label>
+                  <textarea
+                    className="w-full bg-dark border border-dark-border rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[120px] resize-y"
+                    placeholder="Paste the full problem statement here..."
+                    value={questionText}
+                    onChange={(e) => setQuestionText(e.target.value)}
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Language selector */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Programming Language</label>
+                <select
+                  value={programmingLanguage}
+                  onChange={(e) => setProgrammingLanguage(e.target.value)}
+                  className="w-full bg-dark border border-dark-border rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                >
+                  {languages.map((lang) => (
+                    <option key={lang.value} value={lang.value}>{lang.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="h-px bg-dark-border" />
+
+              {/* Summary preview */}
+              <div className="bg-dark rounded-lg p-4 flex items-start gap-3">
+                <Code className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
+                <p className="text-sm text-gray-400">
+                  <span className="text-white font-medium">
+                    {dsaSubMode === 'leetcode' ? 'LeetCode' : 'Custom'} DSA session:{' '}
+                  </span>
+                  {dsaSubMode === 'leetcode'
+                    ? `Problem #${questionNumber || '...'}`
+                    : 'Custom problem'
+                  }
+                  {' in '}
+                  <span className="text-emerald-400">
+                    {languages.find(l => l.value === programmingLanguage)?.label}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setStep('mode')}
+              className="text-gray-400 hover:text-white text-sm flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <Button type="submit" isLoading={isCreating}>
+              <Code className="w-4 h-4 mr-2" />
+              Start Solving
             </Button>
           </div>
         </form>
@@ -402,11 +582,10 @@ export function CreateSessionPage() {
                     key={time}
                     type="button"
                     onClick={() => setTimePerDay(time)}
-                    className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                      timePerDay === time
-                        ? 'bg-primary text-white'
-                        : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
-                    }`}
+                    className={`px-4 py-2 rounded-lg text-sm transition-colors ${timePerDay === time
+                      ? 'bg-primary text-white'
+                      : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
+                      }`}
                   >
                     {time}
                   </button>

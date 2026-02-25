@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     # LLM Model Configuration (All Gemini)
     PLANNING_MODEL: str = "gemini-2.5-pro"
     TUTORING_MODEL: str = "gemini-2.5-flash"
+    DSA_MODEL: str = "gemini-2.5-pro"
+    DSA_HEAVY_MODEL: str = "gemini-3.0-pro"
     
     # Streaming Configuration
     STREAMING_TOKEN_THRESHOLD: int = 100

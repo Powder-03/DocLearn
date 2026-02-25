@@ -59,6 +59,9 @@ export interface CreatePlanRequest {
   time_per_day: string;
   mode?: string;
   target?: string;
+  question_number?: number;
+  programming_language?: string;
+  question_text?: string;
 }
 
 export interface CreatePlanResponse {
@@ -106,6 +109,14 @@ export interface Session {
   status: 'PLANNING' | 'READY' | 'IN_PROGRESS' | 'COMPLETED';
   mode: string;
   target?: string;
+  programming_language?: string;
+  question_number?: number;
+  leetcode_data?: {
+    title?: string;
+    difficulty?: string;
+    topic_tags?: string[];
+    description?: string;
+  };
   lesson_plan: LessonPlan | null;
   created_at: string;
   updated_at: string;

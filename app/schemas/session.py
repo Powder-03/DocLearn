@@ -35,13 +35,28 @@ class CreatePlanRequest(BaseModel):
     )
     mode: str = Field(
         default="generation",
-        description="Learning mode: 'generation' for multi-day, 'quick' for single session"
+        description="Learning mode: 'generation', 'quick', 'dsa_leetcode', or 'dsa_other'"
     )
     target: Optional[str] = Field(
         default=None,
         max_length=500,
         description="Learning goal or target (e.g., exam prep, career switch, project-based)",
         examples=["GATE exam", "Job interview prep", "Build a portfolio project", "Quick revision"]
+    )
+    # DSA mode fields
+    question_number: Optional[int] = Field(
+        default=None,
+        description="LeetCode question number (for dsa_leetcode mode)"
+    )
+    programming_language: Optional[str] = Field(
+        default=None,
+        description="Programming language for DSA mode",
+        examples=["python", "java", "cpp", "javascript"]
+    )
+    question_text: Optional[str] = Field(
+        default=None,
+        max_length=5000,
+        description="Full question text (for dsa_other mode)"
     )
 
     class Config:
@@ -84,6 +99,10 @@ class SessionResponse(BaseModel):
     current_topic_index: int
     status: str
     mode: str
+    target: Optional[str] = None
+    programming_language: Optional[str] = None
+    question_number: Optional[int] = None
+    leetcode_data: Optional[Dict[str, Any]] = None
     lesson_plan: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime

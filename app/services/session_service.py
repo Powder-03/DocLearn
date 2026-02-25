@@ -28,6 +28,8 @@ class SessionMode(str, PyEnum):
     GENERATION = "generation"
     QUICK = "quick"
     RAG = "rag"
+    DSA_LEETCODE = "dsa_leetcode"
+    DSA_OTHER = "dsa_other"
 
 
 class SessionService:
@@ -60,6 +62,10 @@ class SessionService:
         time_per_day: str,
         mode: str = SessionMode.GENERATION.value,
         target: Optional[str] = None,
+        question_number: Optional[int] = None,
+        programming_language: Optional[str] = None,
+        question_text: Optional[str] = None,
+        leetcode_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Create a new learning session.
@@ -69,8 +75,12 @@ class SessionService:
             topic: Learning topic
             total_days: Total days for the plan
             time_per_day: Daily time commitment
-            mode: Session mode (generation, quick, or rag)
-            target: Target exam or goal (for quick mode)
+            mode: Session mode
+            target: Target exam or goal
+            question_number: LeetCode question number (DSA mode)
+            programming_language: Programming language (DSA mode)
+            question_text: Full question text (DSA Other mode)
+            leetcode_data: Fetched LeetCode problem data (DSA LeetCode mode)
             
         Returns:
             Created session document
@@ -94,6 +104,13 @@ class SessionService:
                 "updated_at": datetime.utcnow(),
                 "completed_at": None,
             }
+            
+            # Add DSA-specific fields
+            if mode in (SessionMode.DSA_LEETCODE.value, SessionMode.DSA_OTHER.value):
+                session_doc["programming_language"] = programming_language
+                session_doc["question_number"] = question_number
+                session_doc["question_text"] = question_text
+                session_doc["leetcode_data"] = leetcode_data
             
             await collection.insert_one(session_doc)
             

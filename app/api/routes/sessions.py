@@ -62,6 +62,9 @@ async def create_session(
             time_per_day=request.time_per_day,
             mode=request.mode,
             target=request.target,
+            question_number=request.question_number,
+            programming_language=request.programming_language,
+            question_text=request.question_text,
         )
         
         return CreatePlanResponse(
@@ -116,6 +119,10 @@ async def list_sessions(
                 current_topic_index=s["current_topic_index"],
                 status=s["status"],
                 mode=s["mode"],
+                target=s.get("target"),
+                programming_language=s.get("programming_language"),
+                question_number=s.get("question_number"),
+                leetcode_data=s.get("leetcode_data"),
                 lesson_plan=s.get("lesson_plan"),
                 created_at=s["created_at"],
                 updated_at=s["updated_at"],
@@ -155,6 +162,10 @@ async def get_session(
         current_topic_index=session["current_topic_index"],
         status=session["status"],
         mode=session["mode"],
+        target=session.get("target"),
+        programming_language=session.get("programming_language"),
+        question_number=session.get("question_number"),
+        leetcode_data=session.get("leetcode_data"),
         lesson_plan=session.get("lesson_plan"),
         created_at=session["created_at"],
         updated_at=session["updated_at"],

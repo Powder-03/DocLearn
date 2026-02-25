@@ -29,6 +29,8 @@ class LLMType(str, Enum):
     """Types of LLMs for different use cases."""
     PLANNER = "planner"  # Gemini 2.5 Pro - for curriculum generation
     TUTOR = "tutor"  # Gemini 2.5 Flash - for interactive teaching
+    DSA = "dsa"  # Gemini 2.5 Pro - for DSA LeetCode tutoring
+    DSA_HEAVY = "dsa_heavy"  # Gemini 3.0 Pro - for complex DSA problems
 
 
 class ResponseMode(str, Enum):
@@ -69,6 +71,10 @@ class LLMFactory:
             return cls._create_planner_llm(temperature, streaming)
         elif llm_type == LLMType.TUTOR:
             return cls._create_tutor_llm(temperature, streaming)
+        elif llm_type == LLMType.DSA:
+            return cls._create_dsa_llm(temperature, streaming)
+        elif llm_type == LLMType.DSA_HEAVY:
+            return cls._create_dsa_heavy_llm(temperature, streaming)
         else:
             raise ValueError(f"Unknown LLM type: {llm_type}")
     
@@ -109,6 +115,44 @@ class LLMFactory:
             streaming=streaming,
             convert_system_message_to_human=True,
         )
+    
+    @classmethod
+    def _create_dsa_llm(
+        cls,
+        temperature: Optional[float] = None,
+        streaming: bool = False
+    ) -> ChatGoogleGenerativeAI:
+        """
+        Create Gemini 2.5 Pro for DSA LeetCode tutoring.
+        
+        Uses moderate temperature for structured but engaging responses.
+        """
+        return ChatGoogleGenerativeAI(
+            model=settings.DSA_MODEL,
+            google_api_key=settings.GOOGLE_API_KEY,
+            temperature=temperature if temperature is not None else 0.5,
+            streaming=streaming,
+            convert_system_message_to_human=True,
+        )
+    
+    @classmethod
+    def _create_dsa_heavy_llm(
+        cls,
+        temperature: Optional[float] = None,
+        streaming: bool = False
+    ) -> ChatGoogleGenerativeAI:
+        """
+        Create Gemini 3.0 Pro for complex DSA problems.
+        
+        Uses the heavy model for difficult custom problems.
+        """
+        return ChatGoogleGenerativeAI(
+            model=settings.DSA_HEAVY_MODEL,
+            google_api_key=settings.GOOGLE_API_KEY,
+            temperature=temperature if temperature is not None else 0.5,
+            streaming=streaming,
+            convert_system_message_to_human=True,
+        )
 
 
 def get_planner_llm(
@@ -143,6 +187,22 @@ def get_tutor_llm(
         Configured Gemini Flash instance
     """
     return LLMFactory.get_llm(LLMType.TUTOR, temperature=temperature, streaming=streaming)
+
+
+def get_dsa_llm(
+    temperature: float = 0.5,
+    streaming: bool = False
+) -> ChatGoogleGenerativeAI:
+    """Get Gemini 2.5 Pro for DSA LeetCode tutoring."""
+    return LLMFactory.get_llm(LLMType.DSA, temperature=temperature, streaming=streaming)
+
+
+def get_dsa_heavy_llm(
+    temperature: float = 0.5,
+    streaming: bool = False
+) -> ChatGoogleGenerativeAI:
+    """Get Gemini 3.0 Pro for complex DSA problems."""
+    return LLMFactory.get_llm(LLMType.DSA_HEAVY, temperature=temperature, streaming=streaming)
 
 
 def should_stream(expected_tokens: int) -> bool:
