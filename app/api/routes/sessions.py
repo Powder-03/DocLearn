@@ -9,15 +9,17 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
 from app.api.deps import (
     get_session_service, 
     get_plan_service,
+    get_rag_service,
     require_verified_user,
     AuthUser,
 )
 from app.services import SessionService, PlanService
+from app.services.rag_service import RAGService
 from app.schemas import (
     CreatePlanRequest,
     CreatePlanResponse,
@@ -123,6 +125,7 @@ async def list_sessions(
                 programming_language=s.get("programming_language"),
                 question_number=s.get("question_number"),
                 leetcode_data=s.get("leetcode_data"),
+                book_metadata=s.get("book_metadata"),
                 lesson_plan=s.get("lesson_plan"),
                 created_at=s["created_at"],
                 updated_at=s["updated_at"],
@@ -166,6 +169,7 @@ async def get_session(
         programming_language=session.get("programming_language"),
         question_number=session.get("question_number"),
         leetcode_data=session.get("leetcode_data"),
+        book_metadata=session.get("book_metadata"),
         lesson_plan=session.get("lesson_plan"),
         created_at=session["created_at"],
         updated_at=session["updated_at"],
@@ -372,3 +376,86 @@ async def delete_session(
         raise HTTPException(status_code=404, detail="Session not found")
     
     return None
+
+
+@router.post("/{session_id}/upload-book")
+async def upload_book(
+    session_id: UUID,
+    file: UploadFile = File(...),
+    current_user: AuthUser = Depends(require_verified_user),
+    session_service: SessionService = Depends(get_session_service),
+    plan_service: PlanService = Depends(get_plan_service),
+    rag_svc: RAGService = Depends(get_rag_service),
+):
+    """
+    Upload a PDF book for a RAG session.
+    
+    This endpoint:
+    1. Validates the session is in RAG mode and owned by the user
+    2. Extracts text from the PDF
+    3. Chunks and embeds the text into Qdrant Cloud
+    4. Generates a lesson plan based on the book content
+    5. Returns the session with the generated plan
+    
+    **Request:** multipart/form-data with a PDF file
+    """
+    # Validate session
+    session = await session_service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session["user_id"] != current_user.user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if session.get("mode") != "rag":
+        raise HTTPException(status_code=400, detail="This endpoint is only for RAG/Book Tutor sessions")
+    
+    # Validate file
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    
+    # Check if Qdrant is configured
+    if not rag_svc.is_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Qdrant Cloud is not configured. Set QDRANT_URL and QDRANT_API_KEY in .env"
+        )
+    
+    try:
+        # Read file content
+        file_content = await file.read()
+        
+        # Process: extract → chunk → embed → store in Qdrant
+        upload_result = await rag_svc.process_upload(
+            session_id=str(session_id),
+            file_content=file_content,
+            filename=file.filename,
+        )
+        
+        # Store book metadata in session
+        book_metadata = {
+            "filename": upload_result["filename"],
+            "page_count": upload_result["page_count"],
+            "chunk_count": upload_result["chunk_count"],
+            "file_size_mb": upload_result["file_size_mb"],
+            "upload_status": "completed",
+        }
+        await session_service.update_book_metadata(session_id, book_metadata)
+        
+        # Generate lesson plan from book content
+        plan_result = await plan_service.generate_rag_plan(session_id)
+        
+        return {
+            "status": "success",
+            "message": "Book uploaded and lesson plan generated!",
+            "book_metadata": book_metadata,
+            "lesson_plan": plan_result.get("lesson_plan"),
+            "session_status": plan_result.get("status", "READY"),
+        }
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Book upload failed for session {session_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to process book: {str(e)}"
+        )

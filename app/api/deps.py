@@ -5,6 +5,7 @@ Provides dependency injection for API routes.
 """
 from app.services import SessionService, ChatService, PlanService
 from app.services.user_service import user_service, UserService
+from app.services.rag_service import rag_service, RAGService
 from app.core.auth import (
     verify_token,
     get_optional_user,
@@ -38,12 +39,18 @@ def get_user_service() -> UserService:
     return user_service
 
 
+def get_rag_service() -> RAGService:
+    """Get RAGService singleton instance."""
+    return rag_service
+
+
 # Re-export auth dependencies for convenience
 __all__ = [
     "get_session_service",
     "get_chat_service",
     "get_plan_service",
     "get_user_service",
+    "get_rag_service",
     "get_current_user",
     "get_optional_user",
     "require_verified_user",

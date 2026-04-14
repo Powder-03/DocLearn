@@ -117,6 +117,13 @@ export interface Session {
     topic_tags?: string[];
     description?: string;
   };
+  book_metadata?: {
+    filename?: string;
+    page_count?: number;
+    chunk_count?: number;
+    file_size_mb?: number;
+    upload_status?: string;
+  };
   lesson_plan: LessonPlan | null;
   created_at: string;
   updated_at: string;
@@ -213,4 +220,19 @@ export interface SSEErrorEvent {
 // API Error
 export interface ApiError {
   detail: string | Array<{ loc: string[]; msg: string; type: string }>;
+}
+
+// RAG / Book Tutor types
+export interface UploadBookResponse {
+  status: string;
+  message: string;
+  book_metadata: {
+    filename: string;
+    page_count: number;
+    chunk_count: number;
+    file_size_mb: number;
+    upload_status: string;
+  };
+  lesson_plan: LessonPlan | null;
+  session_status: string;
 }

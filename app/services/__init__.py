@@ -10,12 +10,14 @@ Services:
 - SessionService: MongoDB session management
 - ChatService: Chat orchestration with LangGraph
 - PlanService: Lesson plan generation
+- RAGService: Book-based RAG with Qdrant Cloud
 - MemoryService: MongoDB chat storage with buffer summarization
 - ChatStorageService: Low-level MongoDB chat operations
 """
 from app.services.session_service import SessionService
 from app.services.chat_service import ChatService
 from app.services.plan_service import PlanService
+from app.services.rag_service import RAGService, rag_service
 from app.services.memory import MemoryService, memory_service
 from app.services.mongodb import MongoDBService, ChatStorageService, chat_storage
 
@@ -23,6 +25,8 @@ __all__ = [
     "SessionService",
     "ChatService",
     "PlanService",
+    "RAGService",
+    "rag_service",
     "MemoryService",
     "memory_service",
     "MongoDBService",

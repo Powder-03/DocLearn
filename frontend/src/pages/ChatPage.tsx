@@ -341,6 +341,60 @@ export function ChatPage() {
               </div>
             )}
           </div>
+        ) : session.mode === 'rag' ? (
+          // RAG / Book Tutor sidebar content
+          <div className="p-4 flex-1 overflow-y-auto">
+            <div className="flex items-center gap-2 mb-4">
+              <FileText className="w-4 h-4 text-blue-400" />
+              <span className="text-sm font-medium text-blue-400">Book Tutor</span>
+            </div>
+            <p className="text-sm text-white mb-3 font-medium">{session.topic}</p>
+            {session.book_metadata && (
+              <div className="p-3 bg-dark rounded-lg mb-3">
+                <p className="text-xs text-gray-500 mb-1">📖 Book</p>
+                <p className="text-sm text-gray-300 truncate">{session.book_metadata.filename}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {session.book_metadata.page_count} pages · {session.book_metadata.file_size_mb} MB
+                </p>
+              </div>
+            )}
+            {session.target && (
+              <div className="p-3 bg-dark rounded-lg mb-3">
+                <p className="text-xs text-gray-500 mb-1">🎯 Goal</p>
+                <p className="text-sm text-gray-300">{session.target}</p>
+              </div>
+            )}
+            {/* Day navigation for RAG mode */}
+            <p className="text-xs font-medium text-gray-500 uppercase mb-3 mt-4">Days</p>
+            <div className="space-y-1">
+              {Array.from({ length: session.total_days }, (_, i) => i + 1).map((day) => {
+                const isCurrent = day === currentDay;
+                const isCompleted = day < session!.current_day;
+                return (
+                  <button
+                    key={day}
+                    onClick={() => handleDayClick(day)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                      isCurrent
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        : isCompleted
+                          ? 'text-gray-500 hover:text-gray-300'
+                          : 'text-gray-400 hover:text-white hover:bg-dark'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {isCompleted ? (
+                        <CheckCircle className="w-3.5 h-3.5 text-blue-500" />
+                      ) : (
+                        <Circle className={`w-3.5 h-3.5 ${isCurrent ? 'text-blue-400' : 'text-gray-600'}`} />
+                      )}
+                      Day {day}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         ) : (
           // Multi-day sidebar content
           <div className="p-4 flex-1 overflow-y-auto">

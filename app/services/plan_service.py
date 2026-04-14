@@ -13,9 +13,10 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from app.services.session_service import SessionService, SessionStatus
 from app.services.leetcode_service import leetcode_service
+from app.services.rag_service import rag_service
 from app.graphs import invoke_generation_graph, create_initial_state
-from app.core.prompts import DSA_PLAN_GENERATION_PROMPT
-from app.core.llm_factory import get_dsa_llm, get_dsa_heavy_llm
+from app.core.prompts import DSA_PLAN_GENERATION_PROMPT, RAG_PLAN_GENERATION_SYSTEM_PROMPT, RAG_PLAN_GENERATION_PROMPT
+from app.core.llm_factory import get_planner_llm, get_dsa_llm, get_dsa_heavy_llm
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,16 @@ class PlanService:
                 programming_language=programming_language or "python",
                 question_text=question_text,
                 time_per_day=time_per_day,
+            )
+        
+        # Handle RAG mode (plan generation happens after book upload)
+        if mode == "rag":
+            return await self._create_rag_session(
+                user_id=user_id,
+                topic=topic,
+                total_days=total_days,
+                time_per_day=time_per_day,
+                target=target,
             )
         
         # Force single day for quick mode
@@ -345,3 +356,138 @@ class PlanService:
             "is_completed": day < session["current_day"],
             **day_content,
         }
+    
+    # =========================================================================
+    # RAG MODE (Book Tutor)
+    # =========================================================================
+    
+    async def _create_rag_session(
+        self,
+        user_id: UUID,
+        topic: str,
+        total_days: int,
+        time_per_day: str,
+        target: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Create a RAG session (book upload happens separately).
+        
+        Unlike other modes, the plan is NOT generated here.
+        Plan generation happens after the book is uploaded via the
+        /upload-book endpoint, which calls generate_rag_plan().
+        """
+        session = await self.session_service.create_session(
+            user_id=user_id,
+            topic=topic,
+            total_days=total_days,
+            time_per_day=time_per_day,
+            mode="rag",
+            target=target,
+        )
+        
+        session_id = session["session_id"]
+        logger.info(f"Created RAG session {session_id} (awaiting book upload)")
+        
+        return {
+            "session_id": UUID(session_id),
+            "status": SessionStatus.PLANNING.value,
+            "message": "Session created. Please upload a book to generate the learning plan.",
+            "lesson_plan": None,
+        }
+    
+    async def generate_rag_plan(
+        self,
+        session_id: UUID,
+    ) -> Dict[str, Any]:
+        """
+        Generate a lesson plan from the uploaded book's content.
+        
+        Called after the book has been uploaded and embedded into Qdrant.
+        Uses the book overview to create a grounded curriculum.
+        
+        Args:
+            session_id: Session identifier
+            
+        Returns:
+            Dictionary with lesson_plan
+        """
+        session = await self.session_service.get_session(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+        
+        topic = session["topic"]
+        total_days = session["total_days"]
+        time_per_day = session["time_per_day"]
+        target = session.get("target") or "Master the book content"
+        
+        logger.info(f"Generating RAG plan for session {session_id} from book content")
+        
+        try:
+            # Get book overview from Qdrant
+            book_overview = await rag_service.get_book_overview(str(session_id))
+            
+            if not book_overview:
+                raise ValueError("No book content found. Please upload a book first.")
+            
+            # Generate plan using the book content
+            llm = get_planner_llm(temperature=0.3, streaming=False)
+            
+            plan_prompt = RAG_PLAN_GENERATION_PROMPT.format(
+                topic=topic,
+                total_days=total_days,
+                time_per_day=time_per_day,
+                goal=target,
+                book_overview=book_overview[:8000],  # Cap context
+            )
+            
+            from langchain_core.messages import SystemMessage, HumanMessage
+            messages = [
+                SystemMessage(content=RAG_PLAN_GENERATION_SYSTEM_PROMPT),
+                HumanMessage(content=plan_prompt),
+            ]
+            
+            response = await llm.ainvoke(messages)
+            response_text = response.content.strip()
+            
+            # Clean markdown JSON wrapper
+            if response_text.startswith("```"):
+                response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                response_text = response_text.strip()
+            
+            lesson_plan = json.loads(response_text)
+            
+            # Update session with the plan
+            await self.session_service.update_lesson_plan(
+                session_id=session_id,
+                lesson_plan=lesson_plan,
+                status=SessionStatus.READY.value,
+            )
+            
+            logger.info(f"Successfully generated RAG plan for session {session_id}")
+            
+            return {
+                "session_id": session_id,
+                "status": SessionStatus.READY.value,
+                "message": f"Your book-based learning plan is ready!",
+                "lesson_plan": lesson_plan,
+            }
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"RAG plan JSON parse error: {e}")
+            await self.session_service.update_lesson_plan(
+                session_id=session_id,
+                lesson_plan={"error": f"Failed to parse plan: {str(e)}"},
+                status=SessionStatus.FAILED.value,
+            )
+            raise ValueError(f"Failed to generate valid lesson plan from book: {str(e)}")
+            
+        except Exception as e:
+            logger.exception(f"RAG plan generation failed: {e}")
+            await self.session_service.update_lesson_plan(
+                session_id=session_id,
+                lesson_plan={"error": str(e)},
+                status=SessionStatus.FAILED.value,
+            )
+            raise

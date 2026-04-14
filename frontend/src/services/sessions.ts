@@ -8,7 +8,12 @@ import type {
   ProgressResponse,
   UpdateProgressRequest,
   DayPlan,
+  UploadBookResponse,
 } from '../types';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL 
+  ? `${import.meta.env.VITE_API_URL}/api/v1`
+  : '/api/v1';
 
 export const sessionService = {
   // Create a new learning session
@@ -17,6 +22,31 @@ export const sessionService = {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+
+  // Upload a book for RAG session (multipart form data)
+  uploadBook: async (sessionId: string, file: File): Promise<UploadBookResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const token = localStorage.getItem('token');
+    const url = `${API_BASE_URL}/sessions/${sessionId}/upload-book`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        // Don't set Content-Type — browser sets it with boundary for FormData
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail));
+    }
+
+    return response.json();
   },
 
   // List all sessions for the current user

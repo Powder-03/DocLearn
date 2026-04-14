@@ -21,9 +21,10 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 from app.services.session_service import SessionService, SessionStatus
 from app.services.memory import memory_service, MemoryService
+from app.services.rag_service import rag_service
 from app.graphs import invoke_generation_graph, create_initial_state
 from app.core.llm_factory import get_tutor_llm, get_dsa_llm, get_dsa_heavy_llm
-from app.core.prompts import TUTOR_SYSTEM_PROMPT, TUTOR_FIRST_MESSAGE_PROMPT, QUICK_TUTOR_SYSTEM_PROMPT, DSA_TUTOR_SYSTEM_PROMPT
+from app.core.prompts import TUTOR_SYSTEM_PROMPT, TUTOR_FIRST_MESSAGE_PROMPT, QUICK_TUTOR_SYSTEM_PROMPT, DSA_TUTOR_SYSTEM_PROMPT, RAG_TUTOR_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -301,6 +302,38 @@ class ChatService:
                 day_objectives=", ".join(day_content.get("objectives", [])),
                 current_topic=json.dumps(current_topic, indent=2) if current_topic else "Wrapping up the session",
                 memory_summary=memory_context.get("memory_summary") or "This is the start of the conversation.",
+            )
+        elif session_mode == "rag":
+            # RAG mode: fetch relevant book chunks for context
+            book_context = "No book content available."
+            try:
+                # Build a search query from the current topic + user message
+                search_query = message
+                if current_topic:
+                    topic_name = current_topic.get("name", "")
+                    key_concepts = ", ".join(current_topic.get("key_concepts", []))
+                    search_query = f"{topic_name} {key_concepts} {message}"
+                
+                rag_results = await rag_service.search(str(session_id), search_query)
+                if rag_results:
+                    book_chunks = []
+                    for r in rag_results:
+                        book_chunks.append(f"📖 [Page {r['page_number']}]\n{r['text']}")
+                    book_context = "\n\n---\n\n".join(book_chunks)
+            except Exception as e:
+                logger.warning(f"RAG search failed for session {session_id}: {e}")
+                book_context = "(Book search temporarily unavailable)"
+            
+            system_prompt = RAG_TUTOR_SYSTEM_PROMPT.format(
+                topic=session["topic"],
+                current_day=current_day,
+                total_days=session["total_days"],
+                day_title=day_content.get("title", f"Day {current_day}"),
+                day_objectives=", ".join(day_content.get("objectives", [])),
+                current_topic=json.dumps(current_topic, indent=2) if current_topic else "Wrapping up the day",
+                memory_summary=memory_context.get("memory_summary") or "This is the start of the conversation.",
+                goal=session_target or "Master the book content",
+                book_context=book_context,
             )
         elif session_mode in ("dsa_leetcode", "dsa_other"):
             # DSA mode: use DSA-specific prompt with problem details

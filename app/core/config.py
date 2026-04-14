@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 
 
 class Settings(BaseSettings):
@@ -45,6 +45,18 @@ class Settings(BaseSettings):
     
     # Memory Buffer Configuration
     MEMORY_BUFFER_SIZE: int = 10
+    
+    # Qdrant Cloud Configuration (for RAG mode)
+    QDRANT_URL: Optional[str] = None  # e.g. https://xyz.us-east4-0.gcp.cloud.qdrant.io:6333
+    QDRANT_API_KEY: Optional[str] = None
+    QDRANT_COLLECTION_PREFIX: str = "rag"
+    
+    # RAG Configuration
+    EMBEDDING_MODEL: str = "models/text-embedding-004"
+    RAG_CHUNK_SIZE: int = 1000
+    RAG_CHUNK_OVERLAP: int = 200
+    RAG_TOP_K: int = 5
+    RAG_MAX_FILE_SIZE_MB: int = 50
     
     # Service Configuration
     SERVICE_NAME: str = "generation_service"

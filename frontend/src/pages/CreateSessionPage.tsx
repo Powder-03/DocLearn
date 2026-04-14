@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Sparkles, FileText, Video, Youtube, RefreshCw, ClipboardList, Zap, Code } from 'lucide-react';
+import { ArrowLeft, Sparkles, FileText, Video, Youtube, RefreshCw, ClipboardList, Zap, Code, BookOpen, Upload, X } from 'lucide-react';
 import { Card, Button, Input, Badge } from '../components/ui';
 import { sessionService } from '../services';
 import { useAuth } from '../context';
 
-type Step = 'mode' | 'form' | 'quick-form' | 'dsa-form';
+type Step = 'mode' | 'form' | 'quick-form' | 'dsa-form' | 'rag-form';
 
 export function CreateSessionPage() {
   const navigate = useNavigate();
@@ -34,6 +34,16 @@ export function CreateSessionPage() {
   const [questionText, setQuestionText] = useState('');
   const [programmingLanguage, setProgrammingLanguage] = useState('python');
 
+  // RAG Mode form state
+  const [ragTopic, setRagTopic] = useState('');
+  const [ragGoal, setRagGoal] = useState('');
+  const [ragDays, setRagDays] = useState(7);
+  const [ragTime, setRagTime] = useState('1 hour');
+  const [ragFile, setRagFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const modes = [
     {
       id: 'ai-tutor',
@@ -53,11 +63,11 @@ export function CreateSessionPage() {
     },
     {
       id: 'document-chat',
-      icon: FileText,
-      title: 'Document Chat',
-      description: 'Upload PDFs and chat with your materials',
-      available: false,
-      accent: 'primary',
+      icon: BookOpen,
+      title: 'Book Tutor',
+      description: 'Upload a PDF book and learn from it with AI guidance and page citations',
+      available: true,
+      accent: 'blue',
     },
     {
       id: 'video-learning',
@@ -178,6 +188,41 @@ export function CreateSessionPage() {
     }
   };
 
+  // RAG Mode handler
+  const handleRagCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ragFile) {
+      setError('Please upload a PDF file');
+      return;
+    }
+    setError('');
+    setIsCreating(true);
+    setIsUploading(true);
+    setUploadProgress('Creating session...');
+
+    try {
+      // Step 1: Create the session
+      const response = await sessionService.create({
+        topic: ragTopic,
+        total_days: ragDays,
+        time_per_day: ragTime,
+        mode: 'rag',
+        target: ragGoal || undefined,
+      });
+
+      // Step 2: Upload the book
+      setUploadProgress('Uploading and processing book... This may take a minute.');
+      await sessionService.uploadBook(response.session_id, ragFile);
+
+      setUploadProgress('Done! Redirecting...');
+      navigate(`/sessions/${response.session_id}`);
+    } catch (err) {
+      handleError(err);
+      setIsUploading(false);
+      setUploadProgress('');
+    }
+  };
+
   // Error / verification banner component
   const ErrorBanner = () => (
     <>
@@ -274,6 +319,8 @@ export function CreateSessionPage() {
                 setStep('quick-form');
               } else if (selectedMode === 'dsa-mode') {
                 setStep('dsa-form');
+              } else if (selectedMode === 'document-chat') {
+                setStep('rag-form');
               } else {
                 setStep('form');
               }
@@ -283,6 +330,183 @@ export function CreateSessionPage() {
             Continue
           </Button>
         </div>
+      </div>
+    );
+  }
+
+  // ============ RAG / BOOK TUTOR FORM ============
+  if (step === 'rag-form') {
+    const ragDayOptions = [3, 5, 7, 14, 21, 30];
+    const ragTimeOptions = ['30 min', '1 hour', '2 hours', '3+ hours'];
+
+    return (
+      <div className="max-w-lg mx-auto">
+        <div className="text-sm text-gray-400 mb-6">
+          <Link to="/sessions" className="hover:text-white">Sessions</Link>
+          <span className="mx-2">&gt;</span>
+          <button onClick={() => setStep('mode')} className="hover:text-white">Create</button>
+          <span className="mx-2">&gt;</span>
+          <span className="text-blue-400">Book Tutor</span>
+        </div>
+
+        <h1 className="text-2xl font-bold text-white mb-2">📖 Book Tutor Session</h1>
+        <p className="text-gray-400 mb-8">Upload a book and learn from it with AI guidance</p>
+
+        <ErrorBanner />
+
+        <form onSubmit={handleRagCreate}>
+          <Card padding="lg" className="mb-6">
+            <div className="space-y-6">
+              {/* Book/Topic Name */}
+              <Input
+                label="Book or Topic Name"
+                placeholder="e.g., Introduction to Algorithms, Clean Code..."
+                value={ragTopic}
+                onChange={(e) => setRagTopic(e.target.value)}
+                required
+              />
+
+              {/* Goal */}
+              <div>
+                <Input
+                  label="Learning Goal (optional)"
+                  placeholder="e.g., Understand all chapters, Exam prep, Quick overview..."
+                  value={ragGoal}
+                  onChange={(e) => setRagGoal(e.target.value)}
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Helps the AI focus on what matters most for your goal
+                </p>
+              </div>
+
+              {/* PDF Upload */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Upload PDF Book</label>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 50 * 1024 * 1024) {
+                        setError('File too large. Maximum 50 MB allowed.');
+                        return;
+                      }
+                      setRagFile(file);
+                      setError('');
+                    }
+                  }}
+                />
+
+                {ragFile ? (
+                  <div className="flex items-center gap-3 p-4 bg-dark border border-blue-500/30 rounded-lg">
+                    <BookOpen className="w-5 h-5 text-blue-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white truncate">{ragFile.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {(ragFile.size / (1024 * 1024)).toFixed(1)} MB
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRagFile(null);
+                        if (fileInputRef.current) fileInputRef.current.value = '';
+                      }}
+                      className="p-1 text-gray-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="w-full p-6 border-2 border-dashed border-dark-border rounded-lg hover:border-blue-500/50 transition-colors text-center"
+                  >
+                    <Upload className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">Click to upload a PDF</p>
+                    <p className="text-xs text-gray-600 mt-1">Max 50 MB</p>
+                  </button>
+                )}
+              </div>
+
+              {/* Duration */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-2">Duration</label>
+                <select
+                  value={ragDays}
+                  onChange={(e) => setRagDays(Number(e.target.value))}
+                  className="w-full bg-dark border border-dark-border rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {ragDayOptions.map((days) => (
+                    <option key={days} value={days}>{days} days</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Time per day */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-3">Time per day</label>
+                <div className="flex flex-wrap gap-2">
+                  {ragTimeOptions.map((time) => (
+                    <button
+                      key={time}
+                      type="button"
+                      onClick={() => setRagTime(time)}
+                      className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                        ragTime === time
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'bg-dark border border-dark-border text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {time}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="h-px bg-dark-border" />
+
+              {/* Summary */}
+              <div className="bg-dark rounded-lg p-4 flex items-start gap-3">
+                <BookOpen className="w-5 h-5 text-blue-400 mt-0.5 shrink-0" />
+                <p className="text-sm text-gray-400">
+                  <span className="text-white font-medium">Book Tutor: </span>
+                  {ragDays}-day study plan for "{ragTopic || '...'}" with {ragTime} daily sessions
+                  {ragFile && (
+                    <span> using <span className="text-blue-400">{ragFile.name}</span></span>
+                  )}
+                </p>
+              </div>
+
+              {/* Upload progress */}
+              {isUploading && uploadProgress && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 flex items-center gap-3">
+                  <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                  <p className="text-sm text-blue-400">{uploadProgress}</p>
+                </div>
+              )}
+            </div>
+          </Card>
+
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setStep('mode')}
+              className="text-gray-400 hover:text-white text-sm flex items-center gap-1"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <Button type="submit" isLoading={isCreating} disabled={!ragFile || !ragTopic.trim()}>
+              <BookOpen className="w-4 h-4 mr-2" />
+              Start Learning
+            </Button>
+          </div>
+        </form>
       </div>
     );
   }

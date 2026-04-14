@@ -67,6 +67,20 @@ async def lifespan(app: FastAPI):
     else:
         log.info("✓ Google API key configured (Gemini)")
     
+    # Check Qdrant Cloud configuration (for RAG mode)
+    if settings.QDRANT_URL and settings.QDRANT_API_KEY:
+        try:
+            from app.services.rag_service import rag_service
+            health = await rag_service.health_check()
+            if health["status"] == "connected":
+                log.info(f"✓ Qdrant Cloud connected ({health.get('collections_count', 0)} collections)")
+            else:
+                log.warning(f"⚠️  Qdrant Cloud issue: {health.get('message', 'unknown')}")
+        except Exception as e:
+            log.warning(f"⚠️  Qdrant Cloud check failed: {str(e)[:100]}")
+    else:
+        log.info("ℹ️  Qdrant Cloud not configured (RAG/Book Tutor mode disabled)")
+    
     log.info("=" * 60)
     log.info("Service is ready to accept requests")
     log.info("=" * 60)

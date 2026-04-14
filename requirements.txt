@@ -31,3 +31,7 @@ email-validator  # For Pydantic EmailStr validation
 python-dateutil
 # PDF Generation
 reportlab
+
+# RAG Mode (Book Tutor)
+qdrant-client>=1.7.0  # Qdrant Cloud vector database
+PyMuPDF>=1.24.0  # Fast PDF text extraction (fitz)

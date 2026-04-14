@@ -35,7 +35,7 @@ class CreatePlanRequest(BaseModel):
     )
     mode: str = Field(
         default="generation",
-        description="Learning mode: 'generation', 'quick', 'dsa_leetcode', or 'dsa_other'"
+        description="Learning mode: 'generation', 'quick', 'rag', 'dsa_leetcode', or 'dsa_other'"
     )
     target: Optional[str] = Field(
         default=None,
@@ -103,6 +103,7 @@ class SessionResponse(BaseModel):
     programming_language: Optional[str] = None
     question_number: Optional[int] = None
     leetcode_data: Optional[Dict[str, Any]] = None
+    book_metadata: Optional[Dict[str, Any]] = None
     lesson_plan: Optional[Dict[str, Any]] = None
     created_at: datetime
     updated_at: datetime

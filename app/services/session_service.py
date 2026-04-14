@@ -112,6 +112,10 @@ class SessionService:
                 session_doc["question_text"] = question_text
                 session_doc["leetcode_data"] = leetcode_data
             
+            # Add RAG-specific fields
+            if mode == SessionMode.RAG.value:
+                session_doc["book_metadata"] = None  # Set after upload
+            
             await collection.insert_one(session_doc)
             
             logger.info(f"Created session {session_doc['session_id']} for user {user_id}")
@@ -376,12 +380,23 @@ class SessionService:
         """
         Delete a session.
         
+        For RAG sessions, also cleans up the Qdrant collection.
+        
         Args:
             session_id: Session identifier
             
         Returns:
             True if deleted, False if not found
         """
+        # Check if RAG session — clean up Qdrant
+        session = await self.get_session(session_id)
+        if session and session.get("mode") == SessionMode.RAG.value:
+            try:
+                from app.services.rag_service import rag_service
+                await rag_service.delete_collection(str(session_id))
+            except Exception as e:
+                logger.warning(f"Failed to clean up Qdrant for session {session_id}: {e}")
+        
         collection = self._get_collection()
         
         result = await collection.delete_one({"session_id": str(session_id)})
@@ -449,7 +464,35 @@ class SessionService:
             "lesson_plan": session.get("lesson_plan"),
             "current_day": session.get("current_day"),
             "current_topic_index": session.get("current_topic_index"),
+            "book_metadata": session.get("book_metadata"),
             "created_at": session.get("created_at").isoformat() if session.get("created_at") else None,
             "updated_at": session.get("updated_at").isoformat() if session.get("updated_at") else None,
             "completed_at": session.get("completed_at").isoformat() if session.get("completed_at") else None,
         }
+    
+    async def update_book_metadata(
+        self,
+        session_id: uuid.UUID,
+        book_metadata: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Update book metadata for a RAG session after upload.
+        
+        Args:
+            session_id: Session identifier
+            book_metadata: Dict with filename, page_count, chunk_count, etc.
+            
+        Returns:
+            Updated session or None
+        """
+        collection = self._get_collection()
+        return await collection.find_one_and_update(
+            {"session_id": str(session_id)},
+            {
+                "$set": {
+                    "book_metadata": book_metadata,
+                    "updated_at": datetime.utcnow(),
+                }
+            },
+            return_document=True,
+        )
